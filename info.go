@@ -84,6 +84,7 @@ func (r *reader) unrefAll() {
 
 type BaseInfo struct {
 	Type			InfoType
+	Namespace	string
 	Name		string
 	Attributes		map[string]string
 	Deprecated	bool
@@ -118,6 +119,7 @@ func (r *reader) readBaseInfo(info *C.GIBaseInfo, out *BaseInfo) int {
 		out = &BaseInfo{}
 	}
 	out.Type = InfoType(C.g_base_info_get_type(info))
+	out.Namespace = fromgstr(C.g_base_info_get_namespace(info))
 	// there's an unbroken case bug in gir that makes the following line abort on GITypeInfos
 	// see https://bugzilla.gnome.org/show_bug.cgi?id=709456
 	// thanks lazka in irc.gimp.net/#gtk+
