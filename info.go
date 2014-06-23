@@ -2,11 +2,6 @@
 package main
 
 import (
-"fmt"
-"os"
-"encoding/json"
-"io"
-"bytes"
 	"unsafe"
 	"errors"
 )
@@ -15,7 +10,6 @@ import (
 // #include <girepository.h>
 // #include <stdlib.h>
 import "C"
-var U=fmt.Printf
 
 // TODOs
 // - change int used for pointers to some named type
@@ -992,22 +986,4 @@ func ReadNamespace(nsname string, version string) (ns Namespace, err error) {
 	}
 	r.unrefAll()
 	return ns, nil
-}
-
-type indenter struct {
-	w	io.Writer
-}
-func (i *indenter) Write(p []byte) (n int, err error) {
-	b := new(bytes.Buffer)
-	err = json.Indent(b, p, "", " ")//"\t")
-	if err != nil { return 0, err }
-	return i.w.Write(b.Bytes())
-}
-
-func main() {
-	e := json.NewEncoder(&indenter{os.Stdout})
-	ns, err := ReadNamespace(os.Args[1], os.Args[2])
-	if err != nil { panic(err) }
-	err = e.Encode(ns)
-	if err != nil { panic(err) }
 }
