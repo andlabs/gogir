@@ -63,14 +63,20 @@ func (ns Namespace) TypeToGo(n int) string {
 	t := ns.Types[n]
 	s := ""
 	if t.IsPointer {
-		s += "*"
+		switch t.Tag {
+		case TagUTF8String, TagFilename, TagArray, TagGHashTable:
+			// don't add a pointer to these C types
+		default:
+			s += "*"
+		}
 	}
-	if t.Namespace != ns.Name {
-		s += strings.ToLower(t.Namespace) + "."
-	}
+	// don't add t.Namespace; that'll produce weird things for cross-included data like gobject.string
 	switch t.Tag {
 	case TagVoid:
-		// do nothing
+		if t.IsPointer {
+			s = "interface{}"
+		}
+		// otherwise it's a function return; do nothing
 	case TagBoolean:
 		s += "bool"
 	case TagInt8:
@@ -103,12 +109,15 @@ func (ns Namespace) TypeToGo(n int) string {
 		switch t.ArrayType {
 		case CArray:
 			s += "[]"
+			s += ns.TypeToGo(t.ParamTypes[0])
 		case GArray:
 			s += "GArray"
+			s += ns.TypeToGo(t.ParamTypes[0])
 		case GPtrArray:
 			s += "GPtrArray"
+			s += ns.TypeToGo(t.ParamTypes[0])
 		case GByteArray:
-			s += "GByteArray"
+			s += "[]byte"
 		default:
 			panic(fmt.Errorf("unknown array type %d", t.ArrayType))
 		}
@@ -118,11 +127,16 @@ func (ns Namespace) TypeToGo(n int) string {
 		}
 		s += t.Interface.Name
 	case TagGList:
-		s += "GList"
+		s += "[GList]"
+		s += ns.TypeToGo(t.ParamTypes[0])
 	case TagGSList:
-		s += "GSList"
+		s += "[GSList]"
+		s += ns.TypeToGo(t.ParamTypes[0])
 	case TagGHashTable:
-		s += "GHashTable"
+		s += "map["
+		s += ns.TypeToGo(t.ParamTypes[0])
+		s += "]"
+		s += ns.TypeToGo(t.ParamTypes[1])
 	case TagGError:
 		s += "error"
 	case TagUnichar:

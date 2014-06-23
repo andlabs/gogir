@@ -843,7 +843,7 @@ type TypeInfo struct {
 	BaseInfo
 	IsPointer			bool
 	Tag				TypeTag
-	// TODO ParamTypes
+	ParamTypes		[]int
 	Interface			BaseInfo
 	ArrayLength		int
 	ArrayFixedSize		int
@@ -860,7 +860,20 @@ func (r *reader) readTypeInfo(info *C.GITypeInfo) int {
 	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.IsPointer = fromgbool(C.g_type_info_is_pointer(info))
 	out.Tag = TypeTag(C.g_type_info_get_tag(info))
-	// TODO ParamTypes
+	// TODO THIS IS ACTUALLY JUST GUESSWORK
+	n := 0
+	switch out.Tag {
+	case TagArray, TagGList, TagGSList:
+		n = 1
+	case TagGHashTable:
+		n = 2
+	}
+	out.ParamTypes = make([]int, n)
+	for i := 0; i < n; i++ {
+		ti := C.g_type_info_get_param_type(info, C.gint(i))
+		out.ParamTypes[i] = r.readTypeInfo(ti)
+		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(ti)))
+	}
 	bi := C.g_type_info_get_interface(info)
 	if bi != nil {
 		r.readBaseInfo(bi, &out.Interface)
