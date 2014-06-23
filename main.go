@@ -85,6 +85,10 @@ func main() {
 		for i, _ := range ns.Objects {
 			fmt.Println(ns.ObjectToGo(i))
 		}
+	case "allstructs":
+		for i, _ := range ns.Structs {
+			fmt.Println(ns.StructToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
@@ -240,6 +244,27 @@ func (ns Namespace) ObjectToGo(n int) string {
 	// TODO the four functions
 	return s
 }
+
+func (ns Namespace) StructToGo(n int) string {
+	st := ns.Structs[n]
+	if st.Namespace != ns.Name {
+		return "// " + st.Name + " external; skip"
+	}
+	s := "type " + st.Name + " struct {\n"
+	if st.IsClassStruct {
+		s += "\t// class structure\n"
+	}
+	for _, n := range st.Fields {
+		s += ns.FieldToGo(n) + "\n"
+	}
+	s += "}\n"
+	s += "// methods\n"
+	for _, n := range st.Methods {
+		s += ns.FunctionToGo(n) + "\n"
+	}
+	return s
+}
+
 
 func (ns Namespace) TypeToGo(n int) string {
 	t := ns.Types[n]
