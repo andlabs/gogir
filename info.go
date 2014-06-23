@@ -848,6 +848,6 @@ func (i *indenter) Write(p []byte) (n int, err error) {
 
 func main() {
 	e := json.NewEncoder(&indenter{os.Stdout})
-	err := e.Encode(ReadNamespace("Gtk"))
+	err := e.Encode(ReadNamespace(os.Args[1]))
 	if err != nil { panic(err) }
 }
