@@ -2,6 +2,7 @@
 package main
 
 import (
+"fmt"
 "os"
 "encoding/json"
 "io"
@@ -13,6 +14,7 @@ import (
 // #include <girepository.h>
 // #include <stdlib.h>
 import "C"
+var U=fmt.Printf
 
 type InfoType int
 const (
@@ -70,9 +72,11 @@ func readBaseInfo(info *C.GIBaseInfo, out *BaseInfo) {
 	if out.Type != TypeType {
 		out.Name = fromgstr(C.g_base_info_get_name(info))
 	}
-	out.Attributes = map[string]string{}
-	for C.g_base_info_iterate_attributes(info, &iter, &name, &value) != C.FALSE {
-		out.Attributes[C.GoString(name)] = C.GoString(value)
+	if out.Type != TypeUnresolved {	// will cause asking for attributes to crash (for instance, in GObject.VaClosureMarshal)
+		out.Attributes = map[string]string{}
+		for C.g_base_info_iterate_attributes(info, &iter, &name, &value) != C.FALSE {
+			out.Attributes[C.GoString(name)] = C.GoString(value)
+		}
 	}
 	out.Deprecated = fromgbool(C.g_base_info_is_deprecated(info))
 }
@@ -353,22 +357,18 @@ func readPropertyInfo(info *C.GIPropertyInfo, out *PropertyInfo) {
 	C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(ti)))
 }
 
-// Note: this is a GObject type, not a GObject Introspection type
-// TODO safe to assume signedness?
-type GType uintptr
-
 type RegisteredTypeInfo struct {
 	BaseInfo
 	Name		string
 	Init			string
-	GType		GType
+	// skip GType (see below)
 }
 
 func readRegisteredTypeInfo(info *C.GIRegisteredTypeInfo, out *RegisteredTypeInfo) {
 	readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.Name = fromgstr(C.g_registered_type_info_get_type_name(info))
 	out.Init = fromgstr(C.g_registered_type_info_get_type_init(info))
-	out.GType = GType(C.g_registered_type_info_get_g_type(info))
+	// skip GType; we won't need it (and it causes problems with, for instance, GstPbutils) (also thanks to Tristan in irc.gimp.net/#gtk+ for more information)
 }
 
 type TypeTag int
