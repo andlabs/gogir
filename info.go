@@ -187,16 +187,20 @@ type FunctionInfo struct {
 func readFunctionInfo(info *C.GIFunctionInfo, out *FunctionInfo) {
 	readCallableInfo((*C.GICallableInfo)(unsafe.Pointer(info)), &out.CallableInfo)
 	out.Flags = FunctionInfoFlags(C.g_function_info_get_flags(info))
-	pi := C.g_function_info_get_property(info)
-	if pi != nil {
-		readPropertyInfo(pi, &out.Property)
-		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(pi)))
+	if (out.Flags & (FunctionIsGetter | FunctionIsSetter)) != 0 {
+		pi := C.g_function_info_get_property(info)
+		if pi != nil {
+			readPropertyInfo(pi, &out.Property)
+			C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(pi)))
+		}
 	}
 	out.Symbol = fromgstr(C.g_function_info_get_symbol(info))
-	vi := C.g_function_info_get_vfunc(info)
-	if vi != nil {
-		readVFuncInfo(vi, &out.VFunc)
-		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
+	if (out.Flags & FunctionWrapsVFunc) != 0 {
+		vi := C.g_function_info_get_vfunc(info)
+		if vi != nil {
+			readVFuncInfo(vi, &out.VFunc)
+			C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
+		}
 	}
 }
 
@@ -383,10 +387,10 @@ const (
 	TagFilename TypeTag = C.GI_TYPE_TAG_FILENAME
 	TagArray TypeTag = C.GI_TYPE_TAG_ARRAY
 	TagInterface TypeTag = C.GI_TYPE_TAG_INTERFACE
-	TagGlist TypeTag = C.GI_TYPE_TAG_GLIST
-	TagGslist TypeTag = C.GI_TYPE_TAG_GSLIST
-	TagGhash TypeTag = C.GI_TYPE_TAG_GHASH
-	TagError TypeTag = C.GI_TYPE_TAG_ERROR
+	TagGList TypeTag = C.GI_TYPE_TAG_GLIST
+	TagGSList TypeTag = C.GI_TYPE_TAG_GSLIST
+	TagGHashTable TypeTag = C.GI_TYPE_TAG_GHASH
+	TagGError TypeTag = C.GI_TYPE_TAG_ERROR
 	TagUnichar TypeTag = C.GI_TYPE_TAG_UNICHAR
 )
 
@@ -483,8 +487,10 @@ func readInterfaceInfo(info *C.GIInterfaceInfo, out *InterfaceInfo) {
 		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(ci)))
 	}
 	si := C.g_interface_info_get_iface_struct(info)
-	readStructInfo(si, &out.Struct)
-	C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(si)))
+	if si != nil {
+		readStructInfo(si, &out.Struct)
+		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(si)))
+	}
 }
 
 type ObjectInfo struct {
@@ -570,8 +576,10 @@ func readObjectInfo(info *C.GIObjectInfo, out *ObjectInfo) {
 		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
 	}
 	si := C.g_object_info_get_class_struct(info)
-	readStructInfo(si, &out.Struct)
-	C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(si)))
+	if si != nil {
+		readStructInfo(si, &out.Struct)
+		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(si)))
+	}
 	out.RefFunction = C.GoString(C.g_object_info_get_ref_function(info))
 	out.UnrefFunction = C.GoString(C.g_object_info_get_unref_function(info))
 	out.SetValueFunction = C.GoString(C.g_object_info_get_set_value_function(info))
@@ -683,17 +691,19 @@ func readTypeInfo(info *C.GITypeInfo, out *TypeInfo) {
 		readBaseInfo(bi, &out.Interface)
 		C.g_base_info_unref(bi)
 	}
-	out.ArrayLength = int(C.g_type_info_get_array_length(info))
-	out.ArrayFixedSize = int(C.g_type_info_get_array_fixed_size(info))
-	out.IsZeroTerminated = fromgbool(C.g_type_info_is_zero_terminated(info))
-	out.ArrayType = ArrayType(C.g_type_info_get_array_type(info))
+	if out.Tag == TagArray {
+		out.ArrayLength = int(C.g_type_info_get_array_length(info))
+		out.ArrayFixedSize = int(C.g_type_info_get_array_fixed_size(info))
+		out.IsZeroTerminated = fromgbool(C.g_type_info_is_zero_terminated(info))
+		out.ArrayType = ArrayType(C.g_type_info_get_array_type(info))
+	}
 }
 
 type Namespace struct {
 	// TODO other fields
 	Invalids		[]BaseInfo
 	Functions		[]FunctionInfo
-	Callbacks		[]FunctionInfo
+	Callbacks		[]CallableInfo
 	Structs		[]StructInfo
 	// TODO Boxed
 	Enums		[]EnumInfo
@@ -734,10 +744,11 @@ func ReadNamespace(nsname string) (ns Namespace) {
 			readFunctionInfo((*C.GIFunctionInfo)(unsafe.Pointer(info)), &fi)
 			ns.Functions = append(ns.Functions, fi)
 		case TypeCallback:
-			var fi FunctionInfo
+			var ci CallableInfo
 
-			readFunctionInfo((*C.GIFunctionInfo)(unsafe.Pointer(info)), &fi)
-			ns.Callbacks = append(ns.Callbacks, fi)
+			// callbacks technically have type GICallableInfo but it looks like it's the same as GICallableInfo (and has no special methods of its own)
+			readCallableInfo((*C.GICallableInfo)(unsafe.Pointer(info)), &ci)
+			ns.Callbacks = append(ns.Callbacks, ci)
 		case TypeStruct:
 			var si StructInfo
 
