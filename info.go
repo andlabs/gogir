@@ -47,21 +47,6 @@ const (
 type reader struct {
 	ns			*Namespace
 	baseInfos		map[*C.GIBaseInfo]int
-	argInfos		map[*C.GIArgInfo]int
-	callableInfos	map[*C.GICallableInfo]int
-	functionInfos	map[*C.GIFunctionInfo]int
-	signalInfos	map[*C.GISignalInfo]int
-	vfuncInfos	map[*C.GIVFuncInfo]int
-	constantInfos	map[*C.GIConstantInfo]int
-	fieldInfos		map[*C.GIFieldInfo]int
-	propertyInfos	map[*C.GIPropertyInfo]int
-	enumInfos	map[*C.GIEnumInfo]int
-	interfaceInfos	map[*C.GIInterfaceInfo]int
-	objectInfos	map[*C.GIObjectInfo]int
-	structInfos	map[*C.GIStructInfo]int
-	unionInfos	map[*C.GIUnionInfo]int
-	typeInfos		map[*C.GITypeInfo]int
-
 	unref		[]*C.GIBaseInfo
 }
 
@@ -69,22 +54,27 @@ func newReader(ns *Namespace) (r *reader) {
 	r = new(reader)
 	r.ns = ns
 	r.baseInfos = map[*C.GIBaseInfo]int{}
-	r.argInfos = map[*C.GIArgInfo]int{}
-	r.callableInfos = map[*C.GICallableInfo]int{}
-	r.functionInfos = map[*C.GIFunctionInfo]int{}
-	r.signalInfos = map[*C.GISignalInfo]int{}
-	r.vfuncInfos = map[*C.GIVFuncInfo]int{}
-	r.constantInfos = map[*C.GIConstantInfo]int{}
-	r.fieldInfos = map[*C.GIFieldInfo]int{}
-	r.propertyInfos = map[*C.GIPropertyInfo]int{}
-	r.enumInfos = map[*C.GIEnumInfo]int{}
-	r.interfaceInfos = map[*C.GIInterfaceInfo]int{}
-	r.objectInfos = map[*C.GIObjectInfo]int{}
-	r.structInfos = map[*C.GIStructInfo]int{}
-	r.unionInfos = map[*C.GIUnionInfo]int{}
-	r.typeInfos = map[*C.GITypeInfo]int{}
 	r.unref = make([]*C.GIBaseInfo, 0, 65536)
 	return r
+}
+
+func (r *reader) find(info *C.GIBaseInfo) (n int) {
+	n = -1
+	for i, v := range r.baseInfos {
+		if C.g_base_info_equal(info, i) != C.FALSE {
+			n = v
+			break
+		}
+	}
+	if n != -1 {
+		r.baseInfos[info] = n		// add for next time
+	}
+	return n
+}
+
+func (r *reader) found(info *C.GIBaseInfo, n int) int {
+	r.baseInfos[info] = n
+	return n
 }
 
 func (r *reader) queueUnref(info *C.GIBaseInfo) {
@@ -121,8 +111,10 @@ func fromgbool(b C.gboolean) bool {
 
 func (r *reader) readBaseInfo(info *C.GIBaseInfo, out *BaseInfo) int {
 	toplevel := out == nil
-	if n, ok := r.baseInfos[info]; toplevel && ok {
-		return n
+	if toplevel {
+		if n := r.find(info); n != -1 {
+			return n
+		}
 	}
 
 	var iter C.GIAttributeIter		// properly initializes
@@ -147,8 +139,7 @@ func (r *reader) readBaseInfo(info *C.GIBaseInfo, out *BaseInfo) int {
 	out.Deprecated = fromgbool(C.g_base_info_is_deprecated(info))
 	if toplevel {
 		r.ns.OtherBaseInfos = append(r.ns.OtherBaseInfos, *out)
-		r.baseInfos[info] = len(r.ns.OtherBaseInfos) - 1
-		return r.baseInfos[info]
+		return r.found(info, len(r.ns.OtherBaseInfos) -1)
 	}
 	return -1
 }
@@ -191,7 +182,7 @@ type ArgInfo struct {
 }
 
 func (r *reader) readArgInfo(info *C.GIArgInfo) int {
-	if n, ok := r.argInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -211,8 +202,7 @@ func (r *reader) readArgInfo(info *C.GIArgInfo) int {
 	out.IsReturnValue = fromgbool(C.g_arg_info_is_return_value(info))
 	out.OnlyUsefulForC = fromgbool(C.g_arg_info_is_skip(info))
 	r.ns.Args = append(r.ns.Args, out)
-	r.argInfos[info] = len(r.ns.Args) - 1
-	return r.argInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Args) - 1)
 }
 
 type CallableInfo struct {
@@ -229,8 +219,10 @@ type CallableInfo struct {
 
 func (r *reader) readCallableInfo(info *C.GICallableInfo, out *CallableInfo) int {
 	toplevel := out == nil
-	if n, ok := r.callableInfos[info]; toplevel && ok {
-		return n
+	if toplevel {
+		if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
+			return n
+		}
 	}
 
 	var iter C.GIAttributeIter		// properly initializes
@@ -261,8 +253,7 @@ func (r *reader) readCallableInfo(info *C.GICallableInfo, out *CallableInfo) int
 	out.ReturnOnlyUsefulForC = fromgbool(C.g_callable_info_skip_return(info))
 	if toplevel {
 		r.ns.Callbacks = append(r.ns.Callbacks, *out)
-		r.callableInfos[info] = len(r.ns.Callbacks) - 1
-		return r.callableInfos[info]
+		return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Callbacks) - 1)
 	}
 	return -1		// irrelevant
 }
@@ -286,7 +277,7 @@ type FunctionInfo struct {
 }
 
 func (r *reader) readFunctionInfo(info *C.GIFunctionInfo) int {
-	if n, ok := r.functionInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -311,8 +302,7 @@ func (r *reader) readFunctionInfo(info *C.GIFunctionInfo) int {
 		}
 	}
 	r.ns.Functions = append(r.ns.Functions, out)
-	r.functionInfos[info] = len(r.ns.Functions) - 1
-	return r.functionInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Functions) - 1)
 }
 
 // Note: this is a GObject enum, not a GObject Introspection enum
@@ -337,7 +327,7 @@ type SignalInfo struct {
 }
 
 func (r *reader) readSignalInfo(info *C.GISignalInfo) int {
-	if n, ok := r.signalInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -352,8 +342,7 @@ func (r *reader) readSignalInfo(info *C.GISignalInfo) int {
 	}
 	out.TrueStopsEmit = fromgbool(C.g_signal_info_true_stops_emit(info))
 	r.ns.Signals = append(r.ns.Signals, out)
-	r.signalInfos[info] = len(r.ns.Signals) - 1
-	return r.signalInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Signals) - 1)
 }
 
 type VFuncInfoFlags int
@@ -374,7 +363,7 @@ type VFuncInfo struct {
 }
 
 func (r *reader) readVFuncInfo(info *C.GIVFuncInfo) int {
-	if n, ok := r.vfuncInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -396,8 +385,7 @@ func (r *reader) readVFuncInfo(info *C.GIVFuncInfo) int {
 	}
 	// skip Address; that requires a GType
 	r.ns.VFuncs = append(r.ns.VFuncs, out)
-	r.vfuncInfos[info] = len(r.ns.VFuncs) - 1
-	return r.vfuncInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.VFuncs) - 1)
 }
 
 type ConstantInfo struct {
@@ -408,7 +396,7 @@ type ConstantInfo struct {
 }
 
 func (r *reader) readConstantInfo(info *C.GIConstantInfo) int {
-	if n, ok := r.constantInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -425,8 +413,7 @@ func (r *reader) readConstantInfo(info *C.GIConstantInfo) int {
 	copy(out.Value, value[:])
 	C.g_constant_info_free_value(info, &value)
 	r.ns.Constants = append(r.ns.Constants, out)
-	r.constantInfos[info] = len(r.ns.Constants) - 1
-	return r.constantInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Constants) - 1)
 }
 
 type FieldInfoFlags int
@@ -444,7 +431,7 @@ type FieldInfo struct {
 }
 
 func (r *reader) readFieldInfo(info *C.GIFieldInfo) int {
-	if n, ok := r.fieldInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -457,8 +444,7 @@ func (r *reader) readFieldInfo(info *C.GIFieldInfo) int {
 	out.Type = r.readTypeInfo(ti)
 	r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(ti)))
 	r.ns.Fields = append(r.ns.Fields, out)
-	r.fieldInfos[info] = len(r.ns.Fields) - 1
-	return r.fieldInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Fields) - 1)
 }
 
 // Note: this is a GObject enum, not a GObject Introspection enum
@@ -486,7 +472,7 @@ type PropertyInfo struct {
 }
 
 func (r *reader) readPropertyInfo(info *C.GIPropertyInfo) int {
-	if n, ok := r.propertyInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -498,8 +484,7 @@ func (r *reader) readPropertyInfo(info *C.GIPropertyInfo) int {
 	out.Type = r.readTypeInfo(ti)
 	r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(ti)))
 	r.ns.Properties = append(r.ns.Properties, out)
-	r.propertyInfos[info] = len(r.ns.Properties) - 1
-	return r.propertyInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Properties) - 1)
 }
 
 type RegisteredTypeInfo struct {
@@ -553,7 +538,7 @@ type EnumInfo struct {
 }
 
 func (r *reader) readEnumInfo(info *C.GIEnumInfo) int {
-	if n, ok := r.enumInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -584,8 +569,7 @@ func (r *reader) readEnumInfo(info *C.GIEnumInfo) int {
 		out.ErrorDomain = fromgstr(ed)
 	}
 	r.ns.Enums = append(r.ns.Enums, out)
-	r.enumInfos[info] = len(r.ns.Enums) - 1
-	return r.enumInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Enums) - 1)
 }
 
 type InterfaceInfo struct {
@@ -600,7 +584,7 @@ type InterfaceInfo struct {
 }
 
 func (r *reader) readInterfaceInfo(info *C.GIInterfaceInfo) int {
-	if n, ok := r.interfaceInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -655,8 +639,7 @@ func (r *reader) readInterfaceInfo(info *C.GIInterfaceInfo) int {
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(si)))
 	}
 	r.ns.Interfaces = append(r.ns.Interfaces, out)
-	r.interfaceInfos[info] = len(r.ns.Interfaces) - 1
-	return r.interfaceInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Interfaces) - 1)
 }
 
 type ObjectInfo struct {
@@ -681,7 +664,7 @@ type ObjectInfo struct {
 }
 
 func (r *reader) readObjectInfo(info *C.GIObjectInfo) int {
-	if n, ok := r.objectInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -757,8 +740,7 @@ func (r *reader) readObjectInfo(info *C.GIObjectInfo) int {
 	out.SetValueFunction = C.GoString(C.g_object_info_get_set_value_function(info))
 	out.GetValueFunction = C.GoString(C.g_object_info_get_get_value_function(info))
 	r.ns.Objects = append(r.ns.Objects, out)
-	r.objectInfos[info] = len(r.ns.Objects) - 1
-	return r.objectInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Objects) - 1)
 }
 
 type StructInfo struct {
@@ -772,7 +754,7 @@ type StructInfo struct {
 }
 
 func (r *reader) readStructInfo(info *C.GIStructInfo) int {
-	if n, ok := r.structInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -797,8 +779,7 @@ func (r *reader) readStructInfo(info *C.GIStructInfo) int {
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 	}
 	r.ns.Structs = append(r.ns.Structs, out)
-	r.structInfos[info] = len(r.ns.Structs) - 1
-	return r.structInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Structs) - 1)
 }
 
 type UnionInfo struct {
@@ -814,7 +795,7 @@ type UnionInfo struct {
 }
 
 func (r *reader) readUnionInfo(info *C.GIUnionInfo) int {
-	if n, ok := r.unionInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -851,8 +832,7 @@ func (r *reader) readUnionInfo(info *C.GIUnionInfo) int {
 	out.Size = uintptr(C.g_union_info_get_size(info))
 	out.Alignment = uintptr(C.g_union_info_get_alignment(info))
 	r.ns.Unions = append(r.ns.Unions, out)
-	r.unionInfos[info] = len(r.ns.Unions) - 1
-	return r.unionInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Unions) - 1)
 }
 
 type ArrayType int
@@ -876,7 +856,7 @@ type TypeInfo struct {
 }
 
 func (r *reader) readTypeInfo(info *C.GITypeInfo) int {
-	if n, ok := r.typeInfos[info]; ok {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
 		return n
 	}
 
@@ -897,8 +877,7 @@ func (r *reader) readTypeInfo(info *C.GITypeInfo) int {
 		out.ArrayType = ArrayType(C.g_type_info_get_array_type(info))
 	}
 	r.ns.Types = append(r.ns.Types, out)
-	r.typeInfos[info] = len(r.ns.Types) - 1
-	return r.typeInfos[info]
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Types) - 1)
 }
 
 type Namespace struct {
