@@ -68,6 +68,10 @@ func main() {
 		for i, _ := range ns.Constants {
 			fmt.Println(ns.ConstantToGo(i))
 		}
+	case "allfields":
+		for i, _ := range ns.Fields {
+			fmt.Println(ns.FieldToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
@@ -123,6 +127,15 @@ func (ns Namespace) ConstantToGo(n int) string {
 	}
 	s := "const " + c.Name + " " + ns.TypeToGo(c.Type) + " = "
 	s += "C." + strings.ToUpper(c.Namespace) + "_" + c.Name
+	return s
+}
+
+func (ns Namespace) FieldToGo(n int) string {
+	f := ns.Fields[n]
+	if f.Namespace != ns.Name {
+		return "\t// " + f.Name + " external; skip"
+	}
+	s := "\t" + f.Name + " " + ns.TypeToGo(f.Type)
 	return s
 }
 
