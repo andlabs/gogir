@@ -64,7 +64,7 @@ func (ns Namespace) TypeToGo(n int) string {
 	s := ""
 	if t.IsPointer {
 		switch t.Tag {
-		case TagUTF8String, TagFilename, TagArray, TagGHashTable:
+		case TagUTF8String, TagFilename, TagArray, TagGList, TagGSList, TagGHashTable:
 			// don't add a pointer to these C types
 		default:
 			s += "*"
@@ -107,14 +107,11 @@ func (ns Namespace) TypeToGo(n int) string {
 		s += "string"
 	case TagArray:
 		switch t.ArrayType {
-		case CArray:
+		case CArray, GArray:
 			s += "[]"
 			s += ns.TypeToGo(t.ParamTypes[0])
-		case GArray:
-			s += "GArray"
-			s += ns.TypeToGo(t.ParamTypes[0])
 		case GPtrArray:
-			s += "GPtrArray"
+			s += "[]*"
 			s += ns.TypeToGo(t.ParamTypes[0])
 		case GByteArray:
 			s += "[]byte"
@@ -127,15 +124,27 @@ func (ns Namespace) TypeToGo(n int) string {
 		}
 		s += t.Interface.Name
 	case TagGList:
-		s += "[GList]"
+		s += "[]"
+		if ns.Types[t.ParamTypes[0]].Tag.GContainerStorePointer() {
+			s += "*"
+		}
 		s += ns.TypeToGo(t.ParamTypes[0])
 	case TagGSList:
-		s += "[GSList]"
+		s += "[]"
+		if ns.Types[t.ParamTypes[0]].Tag.GContainerStorePointer() {
+			s += "*"
+		}
 		s += ns.TypeToGo(t.ParamTypes[0])
 	case TagGHashTable:
 		s += "map["
+		if ns.Types[t.ParamTypes[0]].Tag.GContainerStorePointer() {
+			s += "*"
+		}
 		s += ns.TypeToGo(t.ParamTypes[0])
 		s += "]"
+		if ns.Types[t.ParamTypes[1]].Tag.GContainerStorePointer() {
+			s += "*"
+		}
 		s += ns.TypeToGo(t.ParamTypes[1])
 	case TagGError:
 		s += "error"
@@ -145,4 +154,9 @@ func (ns Namespace) TypeToGo(n int) string {
 		panic(fmt.Errorf("unknown tag type %d", t.Tag))
 	}
 	return s
+}
+
+// for GList, GSList, and GHashTable, whether the stored type is a pointer is not stored; use this function to find out
+func (t TypeTag) GContainerStorePointer() bool {
+	return t == TagInterface
 }
