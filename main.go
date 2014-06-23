@@ -72,6 +72,11 @@ func main() {
 		for i, _ := range ns.Fields {
 			fmt.Println(ns.FieldToGo(i))
 		}
+	// TODO properties
+	case "allenums":
+		for i, _ := range ns.Enums {
+			fmt.Println(ns.EnumToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
@@ -138,6 +143,24 @@ func (ns Namespace) FieldToGo(n int) string {
 	s := "\t" + f.Name + " " + ns.TypeToGo(f.Type)
 	return s
 }
+
+func (ns Namespace) EnumToGo(n int) string {
+	e := ns.Enums[n]
+	if e.Namespace != ns.Name {
+		return "// " + e.Name + " external; skip"
+	}
+	// TODO use e.Name or e.RTName?
+	s := "type " + e.Name + " " + e.StorageType.BasicString() + "\n"
+	s += "const (\n"
+	for _, i := range e.Values {
+		v := ns.Values[i]
+		s += "\t" + v.Name + " " + e.Name + " = "
+		s += "C." + strings.ToUpper(v.Namespace) + "_" + v.Name + "\n"		
+	}
+	s += ")"
+	return s
+}
+
 
 func (ns Namespace) TypeToGo(n int) string {
 	t := ns.Types[n]
@@ -239,4 +262,43 @@ func (ns Namespace) TypeToGo(n int) string {
 // for GList, GSList, and GHashTable, whether the stored type is a pointer is not stored; use this function to find out
 func (t TypeTag) GContainerStorePointer() bool {
 	return t == TagInterface
+}
+
+func (t TypeTag) BasicString() string {
+	s := ""
+	switch t {
+	case TagBoolean:
+		s += "bool"
+	case TagInt8:
+		s += "int8"
+	case TagUint8:
+		s += "uint8"
+	case TagInt16:
+		s += "int16"
+	case TagUint16:
+		s += "uint16"
+	case TagInt32:
+		s += "int32"
+	case TagUint32:
+		s += "uint32"
+	case TagInt64:
+		s += "int64"
+	case TagUint64:
+		s += "uint64"
+	case TagFloat:
+		s += "float32"
+	case TagDouble:
+		s += "float64"
+	case TagGType:
+		s += "GType"
+	case TagUTF8String:
+		s += "string"
+	case TagFilename:
+		s += "string"
+	case TagUnichar:
+		s += "rune"
+	default:
+		panic(fmt.Errorf("unknown or non-basic tag type %d", t))
+	}
+	return s
 }
