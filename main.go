@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"bytes"
+	"sort"
 )
 
 type indenter struct {
@@ -19,25 +20,29 @@ func (i *indenter) Write(p []byte) (n int, err error) {
 	return i.w.Write(b.Bytes())
 }
 
-var ns Namespace
-
-func jsonout(w io.Writer) {
+func jsonout(w io.Writer, data interface{}) {
 	e := json.NewEncoder(w)
-	err := e.Encode(ns)
+	err := e.Encode(data)
 	if err != nil { panic(err) }
 }
 
 func main() {
-	var err error
-
 	if len(os.Args) != 4 { panic("usage: " + os.Args[0] + " repo ver {json|jsoni}") }
-	ns, err = ReadNamespace(os.Args[1], os.Args[2])
+	ns, err := ReadNamespace(os.Args[1], os.Args[2])
 	if err != nil { panic(err) }
 	switch os.Args[3] {
 	case "json":
-		jsonout(os.Stdout)
+		jsonout(os.Stdout, ns)
 	case "jsoni":
-		jsonout(&indenter{os.Stdout})
+		jsonout(&indenter{os.Stdout}, ns)
+	case "innerobj":
+		objs := make([]ObjectInfo, len(ns.Objects))
+		copy(objs, ns.Objects)
+		sort.Sort(sort.Reverse(sort.IntSlice(ns.TopLevelObjects)))		// TODO should we do this ourselves? (minus the reversing)
+		for _, i := range ns.TopLevelObjects {
+			objs = append(objs[:i], objs[i + 1:]...)
+		}
+		jsonout(&indenter{os.Stdout}, objs)
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
