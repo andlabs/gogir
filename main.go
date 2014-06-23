@@ -64,6 +64,10 @@ func main() {
 		for i, _ := range ns.VFuncs {
 			fmt.Println(ns.VFuncToGo(i))
 		}
+	case "allconsts":
+		for i, _ := range ns.Constants {
+			fmt.Println(ns.ConstantToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
@@ -109,6 +113,16 @@ func (cb CallableInfo) CallableToGo(ns Namespace) string {
 		s += " (ret " + ret + ")"
 	}
 	// TODO return args and errors
+	return s
+}
+
+func (ns Namespace) ConstantToGo(n int) string {
+	c := ns.Constants[n]
+	if c.Namespace != ns.Name {
+		return "// " + c.Name + " external; skip"
+	}
+	s := "const " + c.Name + " " + ns.TypeToGo(c.Type) + " = "
+	s += "C." + strings.ToUpper(c.Namespace) + "_" + c.Name
 	return s
 }
 
