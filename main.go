@@ -48,6 +48,22 @@ func main() {
 		for i, _ := range ns.Args {
 			fmt.Println(ns.ArgToGo(i))
 		}
+	case "allcallbacks":
+		for i, _ := range ns.Callbacks {
+			fmt.Println(ns.CallbackToGo(i))
+		}
+	case "allfunctions":
+		for i, _ := range ns.Functions {
+			fmt.Println(ns.FunctionToGo(i))
+		}
+	case "allsignals":
+		for i, _ := range ns.Signals {
+			fmt.Println(ns.SignalToGo(i))
+		}
+	case "allvfuncs":
+		for i, _ := range ns.VFuncs {
+			fmt.Println(ns.VFuncToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
@@ -57,6 +73,43 @@ func main() {
 func (ns Namespace) ArgToGo(n int) string {
 	arg := ns.Args[n]
 	return fmt.Sprintf("%s %s", arg.Name, ns.TypeToGo(arg.Type))
+}
+
+func (ns Namespace) CallbackToGo(n int) string {
+	return ns.Callbacks[n].CallableToGo(ns)
+}
+
+func (ns Namespace) FunctionToGo(n int) string {
+	return ns.Functions[n].CallableToGo(ns)
+}
+
+func (ns Namespace) SignalToGo(n int) string {
+	return ns.Signals[n].CallableToGo(ns)
+}
+
+func (ns Namespace) VFuncToGo(n int) string {
+	return ns.VFuncs[n].CallableToGo(ns)
+}
+
+func (cb CallableInfo) CallableToGo(ns Namespace) string {
+	if cb.Namespace != ns.Name {
+		return "// " + cb.Name + " external; skip"
+	}
+	s := "func "
+	if cb.IsMethod {
+		s += "() "
+	}
+	s += cb.Name + "("
+	for _, i := range cb.Args {
+		s += ns.ArgToGo(i) + ", "
+	}
+	s += ")"
+	ret := ns.TypeToGo(cb.ReturnType)
+	if ret != "" {
+		s += " (ret " + ret + ")"
+	}
+	// TODO return args and errors
+	return s
 }
 
 func (ns Namespace) TypeToGo(n int) string {
