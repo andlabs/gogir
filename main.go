@@ -97,6 +97,16 @@ func main() {
 		for i, _ := range ns.Types {
 			fmt.Println(ns.TypeToGo(i))
 		}
+	case "badtypes":
+		for i, _ := range ns.Types {
+			s := ns.TypeToGo(i)
+			if s == "" {
+				t := ns.Types[i]
+				if t.Tag != TagVoid && !t.IsPointer {		// skip void returns
+					fmt.Printf("%d %#v\n", i, ns.Types[i])
+				}
+			}
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
