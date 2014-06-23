@@ -644,8 +644,10 @@ func readUnionInfo(info *C.GIUnionInfo, out *UnionInfo) {
 		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 		// do discriminator values here too
 		ci := C.g_union_info_get_discriminator(info, C.gint(i))
-		readConstantInfo(ci, &out.DiscriminatorValues[i])
-		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(ci)))
+		if ci != nil {		// TODO this should probably just be a skip of the whole thing if there is no discriminator but meh
+			readConstantInfo(ci, &out.DiscriminatorValues[i])
+			C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(ci)))
+		}
 	}
 	n = int(C.g_union_info_get_n_methods(info))
 	out.Methods = make([]FunctionInfo, n)
