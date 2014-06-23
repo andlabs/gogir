@@ -77,6 +77,10 @@ func main() {
 		for i, _ := range ns.Enums {
 			fmt.Println(ns.EnumToGo(i))
 		}
+	case "allinterfaces":
+		for i, _ := range ns.Interfaces {
+			fmt.Println(ns.InterfaceToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
@@ -161,6 +165,36 @@ func (ns Namespace) EnumToGo(n int) string {
 	return s
 }
 
+func (ns Namespace) InterfaceToGo(n int) string {
+	i := ns.Interfaces[n]
+	if i.Namespace != ns.Name {
+		return "// " + i.Name + " external; skip"
+	}
+	s := "type " + i.Name + " interface {\n"
+	for _, p := range i.Prerequisites {
+		s += "\t" + strings.ToLower(p.Namespace) + "." + p.Name + "\n"
+	}
+	// TODO properties
+	s += "\t// methods\n"
+	for _, n := range i.Methods {
+		s += "\t" + ns.FunctionToGo(n) + "\n"
+	}
+	s += "\t// signals\n"
+	for _, n := range i.Signals {
+		s += "\t" + ns.SignalToGo(n) + "\n"
+	}
+	s += "\t// vfuncs\n"
+	for _, n := range i.VFuncs {
+		s += "\t" + ns.VFuncToGo(n) + "\n"
+	}
+	// TODO Struct
+	s += "}"
+	for _, n := range i.Constants {
+		s += ns.ConstantToGo(n) + "\n"
+	}
+	// TODO Struct
+	return s
+}
 
 func (ns Namespace) TypeToGo(n int) string {
 	t := ns.Types[n]
