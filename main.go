@@ -89,6 +89,10 @@ func main() {
 		for i, _ := range ns.Structs {
 			fmt.Println(ns.StructToGo(i))
 		}
+	case "allunions":
+		for i, _ := range ns.Unions {
+			fmt.Println(ns.UnionToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
@@ -265,6 +269,23 @@ func (ns Namespace) StructToGo(n int) string {
 	return s
 }
 
+func (ns Namespace) UnionToGo(n int) string {
+	u := ns.Unions[n]
+	if u.Namespace != ns.Name {
+		return "// " + u.Name + " external; skip"
+	}
+	s := "type " + u.Name + " struct {\n"
+	s += "\t//union\n"
+	for _, n := range u.Fields {
+		s += ns.FieldToGo(n) + "\n"
+	}
+	s += "}\n"
+	s += "// methods\n"
+	for _, n := range u.Methods {
+		s += ns.FunctionToGo(n) + "\n"
+	}
+	return s
+}
 
 func (ns Namespace) TypeToGo(n int) string {
 	t := ns.Types[n]
