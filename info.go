@@ -1026,7 +1026,7 @@ func (i *indenter) Write(p []byte) (n int, err error) {
 }
 
 func main() {
-	e := json.NewEncoder(os.Stdout)//&indenter{os.Stdout})
+	e := json.NewEncoder(&indenter{os.Stdout})
 	ns, err := ReadNamespace(os.Args[1], os.Args[2])
 	if err != nil { panic(err) }
 	err = e.Encode(ns)
