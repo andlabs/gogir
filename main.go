@@ -93,6 +93,10 @@ func main() {
 		for i, _ := range ns.Unions {
 			fmt.Println(ns.UnionToGo(i))
 		}
+	case "alltypes":
+		for i, _ := range ns.Types {
+			fmt.Println(ns.TypeToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
