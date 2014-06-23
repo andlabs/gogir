@@ -19,10 +19,27 @@ func (i *indenter) Write(p []byte) (n int, err error) {
 	return i.w.Write(b.Bytes())
 }
 
+var ns Namespace
+
+func jsonout(w io.Writer) {
+	e := json.NewEncoder(w)
+	err := e.Encode(ns)
+	if err != nil { panic(err) }
+}
+
 func main() {
-	e := json.NewEncoder(&indenter{os.Stdout})
-	ns, err := ReadNamespace(os.Args[1], os.Args[2])
+	var err error
+
+	if len(os.Args) != 4 { panic("usage: " + os.Args[0] + " repo ver {json|jsoni}") }
+	ns, err = ReadNamespace(os.Args[1], os.Args[2])
 	if err != nil { panic(err) }
-	err = e.Encode(ns)
-	if err != nil { panic(err) }
+	switch os.Args[3] {
+	case "json":
+		jsonout(os.Stdout)
+	case "jsoni":
+		jsonout(&indenter{os.Stdout})
+	default:
+		os.Args = os.Args[:1]		// quick hack
+		main()
+	}
 }
