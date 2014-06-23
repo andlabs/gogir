@@ -229,7 +229,7 @@ const (
 type SignalInfo struct {
 	CallableInfo
 	Flags			SignalFlags
-	ClassClosure		VFuncInfo
+	ClassClosure		VFuncInfo		// TODO should this be a pointer or even a BaseInfo? nothing uses this field so I can't check...
 	TrueStopsEmit		bool
 }
 
@@ -256,8 +256,8 @@ type VFuncInfo struct {
 	CallableInfo
 	Flags		VFuncInfoFlags
 	Offset		int
-	Signal		*SignalInfo
-	Invoker		*FunctionInfo
+	Signal		*SignalInfo		// TODO should this be a pointer or even a BaseInfo? nothing uses this field so I can't check...
+	Invoker		*FunctionInfo		// TODO should this be a pointer or even a BaseInfo? nothing uses this field so I can't check...
 	// skip Address; that requires a GType
 }
 
@@ -402,7 +402,7 @@ type EnumInfo struct {
 	RegisteredTypeInfo
 	Values				[]int64
 	ValuesInvalid			[]bool
-	Methods				[]FunctionInfo
+	MethodSymbols		[]string		// holds the Symbol; all enum methods are also global functions
 	StorageType			TypeTag
 	ErrorDomain			string
 }
@@ -422,11 +422,14 @@ func readEnumInfo(info *C.GIEnumInfo, out *EnumInfo) {
 		}
 	}
 	n = int(C.g_enum_info_get_n_methods(info))
-	out.Methods = make([]FunctionInfo, n)
+	out.MethodSymbols = make([]string, n)
 	for i := 0; i < n; i++ {
+		var f FunctionInfo
+
 		fi := C.g_enum_info_get_method(info, C.gint(i))
-		readFunctionInfo(fi, &out.Methods[i])
+		readFunctionInfo(fi, &f)
 		C.g_base_info_unref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
+		out.MethodSymbols[i] = f.Symbol
 	}
 	out.StorageType = TypeTag(C.g_enum_info_get_storage_type(info))
 	ed := C.g_enum_info_get_error_domain(info)
@@ -851,7 +854,7 @@ type indenter struct {
 }
 func (i *indenter) Write(p []byte) (n int, err error) {
 	b := new(bytes.Buffer)
-	err = json.Indent(b, p, "", "\t")
+	err = json.Indent(b, p, "", " ")//"\t")
 	if err != nil { return 0, err }
 	return i.w.Write(b.Bytes())
 }
@@ -863,3 +866,21 @@ func main() {
 	err = e.Encode(ns)
 	if err != nil { panic(err) }
 }
+
+/*
+main() to check if all enum funcs are global
+func main() {
+	ns, err := ReadNamespace(os.Args[1], os.Args[2])
+	if err != nil { panic(err) }
+	ef := make(map[string]struct{})
+	for _, e := range ns.Enums {
+		for _, m := range e.Methods {
+			ef[m.Symbol] = struct{}{}
+		}
+	}
+	for _, f := range ns.Functions {
+		delete(ef, f.Symbol)
+	}
+	fmt.Fprintln(os.Stderr, len(ef), ef)
+}
+*/
