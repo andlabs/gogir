@@ -485,7 +485,7 @@ func (r *reader) readPropertyInfo(info *C.GIPropertyInfo) int {
 
 type RegisteredTypeInfo struct {
 	BaseInfo
-	Name		string
+	RTName		string
 	Init			string
 	// skip GType (see below)
 }
@@ -493,9 +493,25 @@ type RegisteredTypeInfo struct {
 func readRegisteredTypeInfo(info *C.GIRegisteredTypeInfo, out *RegisteredTypeInfo) {
 	// TODO
 	newReader(nil).readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
-	out.Name = fromgstr(C.g_registered_type_info_get_type_name(info))
+	out.RTName = fromgstr(C.g_registered_type_info_get_type_name(info))
 	out.Init = fromgstr(C.g_registered_type_info_get_type_init(info))
 	// skip GType; we won't need it (and it causes problems with, for instance, GstPbutils) (also thanks to tristan in irc.gimp.net/#gtk+ for more information)
+}
+
+type ValueInfo struct {
+	BaseInfo
+	Value		int64
+}
+
+func (r *reader) readValueInfo(info *C.GIValueInfo) int {
+	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
+		return n
+	}
+	out := ValueInfo{}
+	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
+	out.Value = int64(C.g_value_info_get_value(info))
+	r.ns.Values = append(r.ns.Values, out)
+	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Values) - 1)
 }
 
 type TypeTag int
@@ -526,8 +542,7 @@ const (
 
 type EnumInfo struct {
 	RegisteredTypeInfo
-	Values				[]int64
-	ValuesInvalid			[]bool
+	Values				[]int
 	Methods				[]int
 	StorageType			TypeTag
 	ErrorDomain			string
@@ -541,15 +556,14 @@ func (r *reader) readEnumInfo(info *C.GIEnumInfo) int {
 	out := EnumInfo{}
 	readRegisteredTypeInfo((*C.GIRegisteredTypeInfo)(unsafe.Pointer(info)), &out.RegisteredTypeInfo)
 	n := int(C.g_enum_info_get_n_values(info))
-	out.Values = make([]int64, n)
-	out.ValuesInvalid = make([]bool, n)
+	out.Values = make([]int, n)
 	for i := 0; i < n; i++ {
-		vi := C.g_enum_info_get_value(info, C.gint(n))
+		vi := C.g_enum_info_get_value(info, C.gint(i))
 		if vi != nil {
-			out.Values[i] = int64(C.g_value_info_get_value(vi))
+			out.Values[i] = r.readValueInfo(vi)
 			r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
 		} else {
-			out.ValuesInvalid[i] = true
+			out.Values[i] = -1
 		}
 	}
 	n = int(C.g_enum_info_get_n_methods(info))
@@ -905,7 +919,7 @@ type Namespace struct {
 	Constants			[]ConstantInfo
 	// Invalid0s in OtherBaseInfos
 	Unions			[]UnionInfo
-	// TODO values
+	Values			[]ValueInfo
 	Signals			[]SignalInfo
 	VFuncs			[]VFuncInfo
 	Properties			[]PropertyInfo
@@ -926,7 +940,7 @@ type Namespace struct {
 	TopLevelConstants		[]int
 	TopLevelInvalid0s		[]int
 	TopLevelUnions		[]int
-	// TODO values
+	TopLevelValues		[]int
 	TopLevelSignals		[]int
 	TopLevelVFuncs		[]int
 	TopLevelProperties		[]int
@@ -981,7 +995,7 @@ func ReadNamespace(nsname string, version string) (ns Namespace, err error) {
 		case TypeUnion:
 			ns.TopLevelUnions = append(ns.TopLevelUnions, r.readUnionInfo((*C.GIUnionInfo)(unsafe.Pointer(info))))
 		case TypeValue:
-			// TODO
+			ns.TopLevelValues = append(ns.TopLevelValues, r.readValueInfo((*C.GIValueInfo)(unsafe.Pointer(info))))
 		case TypeSignal:
 			ns.TopLevelSignals = append(ns.TopLevelSignals, r.readSignalInfo((*C.GISignalInfo)(unsafe.Pointer(info))))
 		case TypeVFunc:
