@@ -187,9 +187,9 @@ const (
 type FunctionInfo struct {
 	CallableInfo
 	Flags		FunctionInfoFlags
-	Property		PropertyInfo
+	Property		PropertyInfo		// TODO should this be a pointer or even a BaseInfo? nothing uses this field so I can't check...
 	Symbol		string
-	VFunc		VFuncInfo
+	VFunc		VFuncInfo		// TODO should this be a pointer or even a BaseInfo? nothing uses this field so I can't check...
 }
 
 func readFunctionInfo(info *C.GIFunctionInfo, out *FunctionInfo) {
