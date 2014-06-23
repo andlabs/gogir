@@ -90,10 +90,10 @@ type BaseInfo struct {
 	Deprecated	bool
 }
 
-func (BaseInfo) baseInfo() {}
+func (b BaseInfo) baseInfo() BaseInfo { return b }
 
 type Info interface {
-	baseInfo()
+	baseInfo() BaseInfo
 }
 
 func fromgstr(str *C.gchar) string {
