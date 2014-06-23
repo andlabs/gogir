@@ -512,8 +512,8 @@ const (
 	TagUint64 TypeTag = C.GI_TYPE_TAG_UINT64
 	TagFloat TypeTag = C.GI_TYPE_TAG_FLOAT
 	TagDouble TypeTag = C.GI_TYPE_TAG_DOUBLE
-	TagGtype TypeTag = C.GI_TYPE_TAG_GTYPE
-	TagUtf8 TypeTag = C.GI_TYPE_TAG_UTF8
+	TagGType TypeTag = C.GI_TYPE_TAG_GTYPE
+	TagUTF8String TypeTag = C.GI_TYPE_TAG_UTF8
 	TagFilename TypeTag = C.GI_TYPE_TAG_FILENAME
 	TagArray TypeTag = C.GI_TYPE_TAG_ARRAY
 	TagInterface TypeTag = C.GI_TYPE_TAG_INTERFACE
@@ -877,6 +877,7 @@ func (r *reader) readTypeInfo(info *C.GITypeInfo) int {
 }
 
 type Namespace struct {
+	Name			string
 	// TODO other fields
 	OtherBaseInfos		[]BaseInfo		// invalids, invalid0s, unresolveds
 	// Invalids in OtherBaseInfos
@@ -937,6 +938,7 @@ func ReadNamespace(nsname string, version string) (ns Namespace, err error) {
 		return Namespace{}, errors.New(fromgstr(gerr.message))	// TODO adorn
 	}
 	n := int(C.g_irepository_get_n_infos(nil, cns))
+	ns.Name = nsname
 	r := newReader(&ns)
 	for i := 0; i < n; i++ {
 		info := C.g_irepository_get_info(nil, cns, C.gint(i))
