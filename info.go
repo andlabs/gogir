@@ -2,7 +2,10 @@
 package main
 
 import (
-"fmt"
+"os"
+"encoding/json"
+"io"
+"bytes"
 	"unsafe"
 )
 
@@ -833,6 +836,18 @@ func ReadNamespace(nsname string) (ns Namespace) {
 	return ns
 }
 
+type indenter struct {
+	w	io.Writer
+}
+func (i *indenter) Write(p []byte) (n int, err error) {
+	b := new(bytes.Buffer)
+	err = json.Indent(b, p, "", "\t")
+	if err != nil { return 0, err }
+	return i.w.Write(b.Bytes())
+}
+
 func main() {
-	fmt.Println(ReadNamespace("Gtk"))
+	e := json.NewEncoder(&indenter{os.Stdout})
+	err := e.Encode(ReadNamespace("Gtk"))
+	if err != nil { panic(err) }
 }
