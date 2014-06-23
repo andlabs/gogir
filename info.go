@@ -8,6 +8,7 @@ import (
 "io"
 "bytes"
 	"unsafe"
+	"errors"
 )
 
 // #cgo pkg-config: gobject-introspection-1.0
@@ -368,7 +369,7 @@ func readRegisteredTypeInfo(info *C.GIRegisteredTypeInfo, out *RegisteredTypeInf
 	readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.Name = fromgstr(C.g_registered_type_info_get_type_name(info))
 	out.Init = fromgstr(C.g_registered_type_info_get_type_init(info))
-	// skip GType; we won't need it (and it causes problems with, for instance, GstPbutils) (also thanks to Tristan in irc.gimp.net/#gtk+ for more information)
+	// skip GType; we won't need it (and it causes problems with, for instance, GstPbutils) (also thanks to tristan in irc.gimp.net/#gtk+ for more information)
 }
 
 type TypeTag int
@@ -728,11 +729,18 @@ type Namespace struct {
 	Unresolveds	[]BaseInfo
 }
 
-func ReadNamespace(nsname string) (ns Namespace) {
+func ReadNamespace(nsname string, version string) (ns Namespace, err error) {
+	var gerr *C.GError = nil
+	var cver *C.gchar = nil
+
 	cns := (*C.gchar)(unsafe.Pointer(C.CString(nsname)))
 	defer C.free(unsafe.Pointer(cns))
-	if C.g_irepository_require(nil, cns, nil, 0, nil) == nil {
-		panic("load failed")
+	if version != "" {
+		cver := (*C.gchar)(unsafe.Pointer(C.CString(version)))
+		defer C.free(unsafe.Pointer(cver))
+	}
+	if C.g_irepository_require(nil, cns, cver, 0, &gerr) == nil {
+		return Namespace{}, errors.New(fromgstr(gerr.message))	// TODO adorn
 	}
 	n := int(C.g_irepository_get_n_infos(nil, cns))
 	for i := 0; i < n; i++ {
@@ -835,7 +843,7 @@ func ReadNamespace(nsname string) (ns Namespace) {
 		}
 		C.g_base_info_unref(info)
 	}
-	return ns
+	return ns, nil
 }
 
 type indenter struct {
@@ -850,6 +858,8 @@ func (i *indenter) Write(p []byte) (n int, err error) {
 
 func main() {
 	e := json.NewEncoder(&indenter{os.Stdout})
-	err := e.Encode(ReadNamespace(os.Args[1]))
+	ns, err := ReadNamespace(os.Args[1], os.Args[2])
+	if err != nil { panic(err) }
+	err = e.Encode(ns)
 	if err != nil { panic(err) }
 }
