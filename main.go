@@ -81,6 +81,10 @@ func main() {
 		for i, _ := range ns.Interfaces {
 			fmt.Println(ns.InterfaceToGo(i))
 		}
+	case "allobjects":
+		for i, _ := range ns.Objects {
+			fmt.Println(ns.ObjectToGo(i))
+		}
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
@@ -188,11 +192,52 @@ func (ns Namespace) InterfaceToGo(n int) string {
 		s += "\t" + ns.VFuncToGo(n) + "\n"
 	}
 	// TODO Struct
-	s += "}"
+	s += "}"		// TODO newline
 	for _, n := range i.Constants {
 		s += ns.ConstantToGo(n) + "\n"
 	}
 	// TODO Struct
+	return s
+}
+
+func (ns Namespace) ObjectToGo(n int) string {
+	o := ns.Objects[n]
+	if o.Namespace != ns.Name {
+		return "// " + o.Name + " external; skip"
+	}
+	s := "type " + o.Name + " struct {\n"
+	if o.Parent != -1 {
+		oo := ns.Objects[o.Parent]
+		s += "\t" + strings.ToLower(oo.Namespace) + "." + oo.Name + "\n"
+	}
+	s += "\t// interfaces\n"
+	for _, n := range o.Interfaces {
+		i := ns.Interfaces[n]
+		s += "\t" + strings.ToLower(i.Namespace) + "." + i.Name + "\n"
+	}
+	s += "\t//fields\n"
+	for _, n := range o.Fields {
+		s += ns.FieldToGo(n) + "\n"
+	}
+	s += "}\n"
+	s += "// methods\n"
+	for _, n := range o.Methods {
+		s += ns.FunctionToGo(n) + "\n"
+	}
+	// TODO properties
+	s += "// signals\n"
+	for _, n := range o.Signals {
+		s += ns.SignalToGo(n) + "\n"
+	}
+	s += "// vfuncs\n"
+	for _, n := range o.VFuncs {
+		s += ns.VFuncToGo(n) + "\n"
+	}
+	// TODO Struct
+	for _, n := range o.Constants {
+		s += ns.ConstantToGo(n) + "\n"
+	}
+	// TODO the four functions
 	return s
 }
 
