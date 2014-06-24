@@ -202,6 +202,11 @@ func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, i
 		s += ns.ArgValueToGo(receiver, rtype)
 		s += ") "
 	}
+	// disambiguate between constructors
+	// a more Go-like way would be to insert the type name after the New but before anything else :/ conformal/gotk3 does it this way so meh
+	if (method.Flags & FunctionIsConstructor) != 0 {
+		s += ns.GoName(to)
+	}
 	s += ns.GoName(method) + "("
 	for i := 0; i < len(method.Args); i++ {
 		arg := ns.Args[method.Args[i]]
