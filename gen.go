@@ -93,7 +93,11 @@ func generate(ns Namespace) {
 			fmt.Fprintf(b, "\t%s\n", ns.GoName(oo))
 		}
 		fmt.Fprintf(b, "}\n")
-		// TODO methods
+		for _, m := range o.Methods {
+			mm := ns.Functions[m]
+			fmt.Fprintf(b, "%s\n", ns.wrap(mm, o))
+		}
+		// TODO other methods
 		// TODO constants
 		fmt.Fprintf(b, "\n")
 	}
@@ -104,6 +108,7 @@ func generate(ns Namespace) {
 // the rest of this file generates a wrapper function, taking care of converting special GLib constructs
 
 var basicNames = map[TypeTag]string{
+	TagVoid:			"unsafe.Pointer",
 	TagBoolean:		"C.gboolean",
 	TagInt8:			"C.gint8",
 	TagUint8:			"C.guint8",
@@ -128,7 +133,7 @@ func (ns Namespace) argPrefix(arg ArgInfo) string {
 	switch t.Tag {
 	case TagUTF8String, TagFilename:
 		s := fmt.Sprintf("\treal_%s := (*C.gchar)(unsafe.Pointer(C.CString(%s)))\n", arg.Name, arg.Name)
-		s += fmt.Sprintf("\tdefer C.free(real_%s)\n", arg.Name)
+		s += fmt.Sprintf("\tdefer C.free(unsafe.Pointer(real_%s))\n", arg.Name)
 		return s
 	case TagArray:
 		// TODO
@@ -144,7 +149,7 @@ func (ns Namespace) argPrefix(arg ArgInfo) string {
 	case TagGError:
 		return fmt.Sprintf("\tvar real_%s *C.GError = nil\n", arg.Name)
 	default:
-		panic(fmt.Errorf("unknown tag type %s in argPrefix()", t.Tag))
+		panic(fmt.Errorf("unknown tag type %d in argPrefix()", t.Tag))
 	}
 	return "\t//TODO\n"
 }
@@ -161,32 +166,39 @@ func (ns Namespace) argSuffix(arg ArgInfo) string {
 	return ""			// no extra cleanup needed
 }
 
-func (ns Namespace) wrap(method FunctionInfo, object ObjectInfo, forInterface bool, iface InterfaceInfo) string {
+func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo) string {
 	s := "func "
 	prefix := ""
 	suffix := ""
 	argStart := 0
+	// method.IsMethod behaves in absoutely incomprehensible ways
+	// so let's make sure the first argument is damn well a receiver
 	if method.IsMethod {
-		s += "("
-		receiver := ns.Args[method.Args[0]]
-		prefix += ns.argPrefix(receiver)
-		suffix += ns.argSuffix(receiver)
-		s += ns.ArgToGo(method.Args[0])
-		s += ") "
-		argStart = 1
+		if len(method.Args) > 0 {
+			receiver := ns.Args[method.Args[0]]
+			rtype := ns.Types[receiver.Type]
+			if rtype.Tag == TagInterface && rtype.Interface.Namespace == ns.Name && rtype.Name == to.Name {
+				s += "("
+				prefix += ns.argPrefix(receiver)
+				suffix = ns.argSuffix(receiver) + suffix
+				s += ns.ArgToGo(method.Args[0])
+				s += ") "
+				argStart = 1
+			}
+		}
 	}
-	s += method.Name + "("
+	s += ns.GoName(method) + "("
 	for i := argStart; i < len(method.Args); i++ {
 		arg := ns.Args[method.Args[i]]
 		prefix += ns.argPrefix(arg)
-		suffix += ns.argSuffix(arg)
+		suffix = ns.argSuffix(arg) + suffix
 		s += ns.ArgToGo(method.Args[i])
 		s += ", "
 	}
 	s += ") "
 	ret := ns.TypeToGo(method.ReturnType)
 	if ret != "" {
-		s += " (ret " + ret + ")"
+		s += "(ret " + ret + ") "
 	}
 	s += "{\n"
 	s += prefix
@@ -206,8 +218,8 @@ func (ns Namespace) wrap(method FunctionInfo, object ObjectInfo, forInterface bo
 	s += "\n"
 	s += suffix
 	if ret != "" {
-		s += "\nreturn ret\n"
+		s += "\treturn ret\n"
 	}
-	s += "}\n"
+	s += "}"
 	return s
 }
