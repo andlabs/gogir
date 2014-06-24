@@ -105,3 +105,18 @@ func (ns Namespace) GoName(i Info) string {
 	// fall back to a guess/the correct answer for values, fields, and what not
 	return nsprefix + nsGoFieldValueName(b.Name)
 }
+
+func firstGoWord(ns string) string {
+	out := ""
+	n := 0
+	for _, r := range ns {
+		if unicode.IsUpper(r) {
+			n++
+			if n == 2 {
+				break
+			}
+		}
+		out += string(r)
+	}
+	return out
+}

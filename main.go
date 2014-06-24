@@ -107,6 +107,8 @@ func main() {
 				}
 			}
 		}
+	case "gen":
+		generate(ns)
 	default:
 		os.Args = os.Args[:1]		// quick hack
 		main()
