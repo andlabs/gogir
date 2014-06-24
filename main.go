@@ -313,6 +313,12 @@ func (ns Namespace) TypeToGo(n int) string {
 		switch t.Tag {
 		case TagUTF8String, TagFilename, TagArray, TagGList, TagGSList, TagGHashTable:
 			// don't add a pointer to these C types
+		case TagInterface:
+			// see GContainerStorePointer below
+			if t.Interface.Type == TypeInterface {
+				break
+			}
+			fallthrough
 		default:
 			s += "*"
 		}
@@ -372,24 +378,24 @@ func (ns Namespace) TypeToGo(n int) string {
 		s += t.Interface.Name
 	case TagGList:
 		s += "[]"
-		if ns.Types[t.ParamTypes[0]].Tag.GContainerStorePointer() {
+		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
 			s += "*"
 		}
 		s += ns.TypeToGo(t.ParamTypes[0])
 	case TagGSList:
 		s += "[]"
-		if ns.Types[t.ParamTypes[0]].Tag.GContainerStorePointer() {
+		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
 			s += "*"
 		}
 		s += ns.TypeToGo(t.ParamTypes[0])
 	case TagGHashTable:
 		s += "map["
-		if ns.Types[t.ParamTypes[0]].Tag.GContainerStorePointer() {
+		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
 			s += "*"
 		}
 		s += ns.TypeToGo(t.ParamTypes[0])
 		s += "]"
-		if ns.Types[t.ParamTypes[1]].Tag.GContainerStorePointer() {
+		if ns.Types[t.ParamTypes[1]].GContainerStorePointer() {
 			s += "*"
 		}
 		s += ns.TypeToGo(t.ParamTypes[1])
@@ -404,8 +410,9 @@ func (ns Namespace) TypeToGo(n int) string {
 }
 
 // for GList, GSList, and GHashTable, whether the stored type is a pointer is not stored; use this function to find out
-func (t TypeTag) GContainerStorePointer() bool {
-	return t == TagInterface
+// interfaces become Go interfaces which are /references/, so don't make htem pointers either
+func (t TypeInfo) GContainerStorePointer() bool {
+	return t.Tag == TagInterface && t.Interface.Type != TypeInterface
 }
 
 func (t TypeTag) BasicString() string {
