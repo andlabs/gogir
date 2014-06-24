@@ -53,14 +53,18 @@ func (ns Namespace) CName(i Info) string {
 }
 
 // the Go package name is just the first letter lowercase
+// exception: gobject, glib, gmodule, and girepository
 func nsGoName(ns string) string {
+	if ns == "GObject" || ns == "GLib" || ns == "GModule" || ns == "GIRepository" {
+		return strings.ToLower(ns)
+	}
 	nns := []rune(ns)
-	nns[0] = unicode.ToUpper(nns[0])
+	nns[0] = unicode.ToLower(nns[0])
 	return string(nns)
 }
 
 // for names that wouldn't already be in canonical form, convert second and later characters to uppercase, removing underscoress
-func nsGoObjName(ns string) string {
+func nsGoFieldValueName(ns string) string {
 	out := ""
 	first := true
 	for _, c := range ns {
@@ -99,5 +103,5 @@ func (ns Namespace) GoName(i Info) string {
 		return nsprefix + x.Name
 	}
 	// fall back to a guess/the correct answer for values, fields, and what not
-	return ns.Name + nsGoObjName(b.Name)
+	return nsprefix + nsGoFieldValueName(b.Name)
 }

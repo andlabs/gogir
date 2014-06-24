@@ -142,7 +142,7 @@ func (cb CallableInfo) CallableToGo(ns Namespace) string {
 	if cb.IsMethod {
 		s += "() "
 	}
-	s += cb.Name + "("
+	s += ns.GoName(cb) + "("
 	for _, i := range cb.Args {
 		s += ns.ArgToGo(i) + ", "
 	}
@@ -160,8 +160,8 @@ func (ns Namespace) ConstantToGo(n int) string {
 	if c.Namespace != ns.Name {
 		return "// " + c.Name + " external; skip"
 	}
-	s := "const " + c.Name + " " + ns.TypeToGo(c.Type) + " = "
-	s += "C." + strings.ToUpper(c.Namespace) + "_" + c.Name
+	s := "const " + ns.GoName(c) + " " + ns.TypeToGo(c.Type) + " = "
+	s += "C." + ns.CName(c)
 	return s
 }
 
@@ -170,7 +170,7 @@ func (ns Namespace) FieldToGo(n int) string {
 	if f.Namespace != ns.Name {
 		return "\t// " + f.Name + " external; skip"
 	}
-	s := "\t" + f.Name + " " + ns.TypeToGo(f.Type)
+	s := "\t" + ns.GoName(f) + " " + ns.TypeToGo(f.Type)
 	return s
 }
 
@@ -180,12 +180,12 @@ func (ns Namespace) EnumToGo(n int) string {
 		return "// " + e.Name + " external; skip"
 	}
 	// TODO use e.Name or e.RTName?
-	s := "type " + e.Name + " " + e.StorageType.BasicString() + "\n"
+	s := "type " + ns.GoName(e) + " " + e.StorageType.BasicString() + "\n"
 	s += "const (\n"
 	for _, i := range e.Values {
 		v := ns.Values[i]
-		s += "\t" + v.Name + " " + e.Name + " = "
-		s += "C." + strings.ToUpper(v.Namespace) + "_" + v.Name + "\n"		
+		s += "\t" + ns.GoName(v) + " " + ns.GoName(e) + " = "
+		s += "C." + ns.CName(v) + "\n"		
 	}
 	s += ")"
 	return s
@@ -196,7 +196,7 @@ func (ns Namespace) InterfaceToGo(n int) string {
 	if i.Namespace != ns.Name {
 		return "// " + i.Name + " external; skip"
 	}
-	s := "type " + i.Name + " interface {\n"
+	s := "type " + ns.GoName(i) + " interface {\n"
 	for _, p := range i.Prerequisites {
 		s += "\t" + strings.ToLower(p.Namespace) + "." + p.Name + "\n"
 	}
@@ -227,15 +227,14 @@ func (ns Namespace) ObjectToGo(n int) string {
 	if o.Namespace != ns.Name {
 		return "// " + o.Name + " external; skip"
 	}
-	s := "type " + o.Name + " struct {\n"
+	s := "type " + ns.GoName(o) + " struct {\n"
 	if o.Parent != -1 {
-		oo := ns.Objects[o.Parent]
-		s += "\t" + strings.ToLower(oo.Namespace) + "." + oo.Name + "\n"
+		s += "\t" + ns.GoName(ns.Objects[o.Parent]) + "\n"
 	}
 	s += "\t// interfaces\n"
 	for _, n := range o.Interfaces {
 		i := ns.Interfaces[n]
-		s += "\t" + strings.ToLower(i.Namespace) + "." + i.Name + "\n"
+		s += "\t" + ns.GoName(i) + "\n"
 	}
 	s += "\t//fields\n"
 	for _, n := range o.Fields {
@@ -268,7 +267,7 @@ func (ns Namespace) StructToGo(n int) string {
 	if st.Namespace != ns.Name {
 		return "// " + st.Name + " external; skip"
 	}
-	s := "type " + st.Name + " struct {\n"
+	s := "type " + ns.GoName(st) + " struct {\n"
 	if st.IsClassStruct {
 		s += "\t// class structure\n"
 	}
@@ -288,7 +287,7 @@ func (ns Namespace) UnionToGo(n int) string {
 	if u.Namespace != ns.Name {
 		return "// " + u.Name + " external; skip"
 	}
-	s := "type " + u.Name + " struct {\n"
+	s := "type " + ns.GoName(u) + " struct {\n"
 	s += "\t//union\n"
 	for _, n := range u.Fields {
 		s += ns.FieldToGo(n) + "\n"
