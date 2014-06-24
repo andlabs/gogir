@@ -1,0 +1,6 @@
+- .native/.Native() appending is wrong
+  ENUM - do not append
+  INTERFACE - ?????
+  OBJECT - do append
+  STRUCT - do not append
+  UNION - ?????
