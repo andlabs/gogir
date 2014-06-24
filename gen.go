@@ -10,7 +10,7 @@ import (
 func generate(ns Namespace) {
 	b := new(bytes.Buffer)
 
-	fmt.Fprintf(b, "package %s\n\nimport \"unsafe\"\nimport \"errors\"\n\n// ADD IMPORTS AND CGO DIRECTIVES HERE\n// BE SURE TO INCLUDE stdio.h\n\n", nsGoName(ns.Name))
+	fmt.Fprintf(b, "package %s\n\nimport \"unsafe\"\nimport \"errors\"\nimport \"math\"\n\n// ADD IMPORTS AND CGO DIRECTIVES HERE\n// BE SURE TO INCLUDE stdio.h\n\n", nsGoName(ns.Name))
 
 	// enumerations
 	// to avoid unnecessary typing, let's collect all value names
@@ -176,13 +176,15 @@ func (ns Namespace) argPrefix(arg ArgInfo, t TypeInfo) string {
 		s += fmt.Sprintf("\tfor _, real_%s_val := range %s {\n", arg.Name, arg.Name)
 		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
 			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(real_%s_arg))\n", arg.Name, arg.Name, arg.Name)
+		} else if ns.Types[t.ParamTypes[0]].Tag == TagFloat {
+			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(uintptr(math.Float32bits(real_%s_arg))))\n", arg.Name, arg.Name, arg.Name)
+		} else if ns.Types[t.ParamTypes[0]].Tag == TagDouble {
+			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(uintptr(math.Float64bits(real_%s_arg))))\n", arg.Name, arg.Name, arg.Name)
 		} else {
-			// TODO floats fail this
 			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(uintptr(real_%s_arg)))\n", arg.Name, arg.Name, arg.Name)
 		}
 		s += "\t}\n"
 		s += fmt.Sprintf("\treal_%s = C.g_list_reverse(real_%s)\n", arg.Name, arg.Name)
-		// TODO bad for dynamic stuff
 		s += fmt.Sprintf("\tdefer C.g_list_free(real_%s)\n", arg.Name)
 		return s
 	case TagGSList:
