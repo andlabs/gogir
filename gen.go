@@ -128,6 +128,39 @@ func generate(ns Namespace) {
 		fmt.Fprintf(b, "\n")
 	}
 
+	// structures
+	for _, n := range ns.TopLevelStructs {
+		s := ns.Structs[n]
+		if s.Namespace != ns.Name {		// skip foreign imports
+			continue
+		}
+		if s.IsClassStruct {				// skip GObject boilerplate
+			continue
+		}
+		if s.Foreign {		// TODO debugging
+			fmt.Fprintf(b, "// foreign\n")
+		}
+		goName := ns.GoName(s)
+		if len(s.Fields) == 0 && bytes.HasSuffix([]byte(goName), []byte("Private")) {
+			// skip opaque private structures (implementation details that are slowly being eliminated)
+			// this should be safe; very few nonempty privates are left that it doesn't matter (and let's bind glib.Private anyway, just to be safe)
+			continue
+		}
+		fmt.Fprintf(b, "type %s struct {\n", goName)
+		for _, m := range s.Fields {
+			f := ns.Fields[m]
+			// TODO substitute TypeToGo()
+			fmt.Fprintf(b, "\t%s %s\n", ns.GoName(f), ns.TypeToGo(f.Type))
+		}
+		fmt.Fprintf(b, "}\n")
+		// TODO conversion functions
+//		for _, m := range s.Methods {
+//			mm := ns.Functions[m]
+//			fmt.Fprintf(b, "%s\n", ns.wrap(mm, s, false, InterfaceInfo{}))
+//		}
+//		fmt.Fprintf(b, "\n")
+	}
+
 	os.Stdout.Write(b.Bytes())
 }
 
