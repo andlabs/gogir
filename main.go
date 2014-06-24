@@ -263,7 +263,10 @@ func (ns Namespace) TypeValueToGo(t TypeInfo, isArg bool) string {
 			s += strings.ToLower(t.Interface.Namespace) + "."
 		}
 		if isArg {		// arguments become the equivalent interfaces
-			s += "I"
+			if t.Type == TypeObject {
+				s += "I"
+			}
+			// TODO structs and unions?
 		}
 		s += t.Interface.Name
 	case TagGList:

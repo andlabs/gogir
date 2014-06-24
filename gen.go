@@ -135,7 +135,6 @@ func generate(ns Namespace) {
 
 var basicNames = map[TypeTag]string{
 	TagVoid:			"unsafe.Pointer",
-	TagBoolean:		"C.gboolean",
 	TagInt8:			"C.gint8",
 	TagUint8:			"C.guint8",
 	TagInt16:			"C.gint16",
@@ -156,6 +155,10 @@ func (ns Namespace) argPrefix(arg ArgInfo, t TypeInfo) string {
 		return fmt.Sprintf("\treal_%s := %s(%s)\n", arg.Name, n, arg.Name)
 	}
 	switch t.Tag {
+	case TagBoolean:
+		s := fmt.Sprintf("\treal_%s := C.gboolean(C.TRUE)\n", arg.Name)
+		s += fmt.Sprintf("\tif !(%s) { real_%s = C.gboolean(C.FALSE)\n", arg.Name, arg.Name)
+		return s
 	case TagUTF8String, TagFilename:
 		s := fmt.Sprintf("\treal_%s := (*C.gchar)(unsafe.Pointer(C.CString(%s)))\n", arg.Name, arg.Name)
 		s += fmt.Sprintf("\tdefer C.free(unsafe.Pointer(real_%s))\n", arg.Name)
@@ -164,6 +167,9 @@ func (ns Namespace) argPrefix(arg ArgInfo, t TypeInfo) string {
 		// TODO
 	case TagInterface:
 		ctype := ns.CName(t.Interface)
+		if t.Interface.Type == TypeEnum {
+			return fmt.Sprintf("\treal_%s = (C.%s)(%s)\n", arg.Name, ctype, arg.Name)
+		}
 		return fmt.Sprintf("\treal_%s = (*C.%s)(unsafe.Pointer(%s.Native()))\n", arg.Name, ctype, arg.Name)
 	case TagGList:
 		// TODO
@@ -188,6 +194,37 @@ func (ns Namespace) argSuffix(arg ArgInfo, t TypeInfo) string {
 		return s
 	}
 	return ""			// no extra cleanup needed
+}
+
+func (ns Namespace) retconv(expr string, t TypeInfo) string {
+	switch t.Tag {
+	case TagVoid:
+		if t.IsPointer {
+			// TODO
+		}
+		return expr		// no return
+	case TagBoolean:
+		return "(" + expr + ") != C.FALSE"
+	case TagUTF8String,TagFilename:
+		return "C.GoString((*C.char)(unsafe.Pointer(" + expr + ")))"
+	case TagArray:
+		// TODO
+	case TagInterface:
+		if t.IsPointer {		// objects
+			return fmt.Sprintf("&%s{}; ret.native = unsafe.Pointer(%s)", ns.GoName(t.Interface), expr)
+		}
+		// fall through to the bottom, which does what we want
+	case TagGList:
+		// TODO
+	case TagGSList:
+		// TODO
+	case TagGHashTable:
+		// TODO
+	case TagGError:
+		// TODO
+	}
+	// anything else? take a guess... (correct for basic types)
+	return fmt.Sprintf("(%s)(%s)", ns.TypeValueToGo(t, false), expr)
 }
 
 func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, iface InterfaceInfo) string {
@@ -242,21 +279,19 @@ func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, i
 	s += "{\n"
 	s += prefix
 	s += "\t"
-	if ret != "" {
-		s += "ret = (" + ret + ")("
-	}
-	s += "C." + ns.CName(method) + "("
+	j := "C." + ns.CName(method) + "("
 	if method.IsMethod {
-		s += "real_this, "
+		j += "real_this, "
 	}
 	for i := 0; i < len(method.Args); i++ {
 		arg := ns.Args[method.Args[i]]
-		s += "real_" + arg.Name + ", "
+		j += "real_" + arg.Name + ", "
 	}
-	s += ")"
+	j += ")"
 	if ret != "" {
-		s += ")"
+		s += "ret = "
 	}
+	s += ns.retconv(j, ns.Types[method.ReturnType])
 	s += "\n"
 	s += suffix
 	if ret != "" {
