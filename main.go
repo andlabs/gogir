@@ -144,12 +144,16 @@ func (cb CallableInfo) CallableToGo(ns Namespace) string {
 	if cb.IsMethod {
 		s += "() "
 	}
-	s += ns.GoName(cb) + "("
-	for _, i := range cb.Args {
+	return s + ns.GoFuncSig(cb)
+}
+
+func (ns Namespace) GoFuncSig(ci CallableInfo) string {
+	s := ns.GoName(ci) + "("
+	for _, i := range ci.Args {
 		s += ns.ArgToGo(i) + ", "
 	}
 	s += ")"
-	ret := ns.TypeToGo(cb.ReturnType)
+	ret := ns.TypeToGo(ci.ReturnType)
 	if ret != "" {
 		s += " (ret " + ret + ")"
 	}

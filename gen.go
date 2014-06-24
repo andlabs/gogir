@@ -18,6 +18,9 @@ func generate(ns Namespace) {
 	namecount := map[string]int{}
 	for _, n := range ns.TopLevelEnums {
 		e := ns.Enums[n]
+		if e.Namespace != ns.Name {		// skip foreign imports
+			continue
+		}
 		for _, i := range e.Values {
 			v := ns.Values[i]
 			namecount[ns.GoName(v)]++
@@ -25,6 +28,9 @@ func generate(ns Namespace) {
 	}
 	for _, n := range ns.TopLevelEnums {
 		e := ns.Enums[n]
+		if e.Namespace != ns.Name {		// skip foreign imports
+			continue
+		}
 		goName := ns.GoName(e)
 		fmt.Fprintf(b, "type %s %s\n", goName, e.StorageType.BasicString())
 		fmt.Fprintf(b, "const (\n")
@@ -42,6 +48,28 @@ func generate(ns Namespace) {
 				fgw, ns.GoName(v), goName, ns.CName(v))
 		}
 		fmt.Fprintf(b, ")\n")
+		fmt.Fprintf(b, "\n")
+	}
+
+	// interfaces
+	// we don't need to worry about implementations of methods for each object until we get to the objects themselves
+	// we also don't need to worry about signals
+	// we DO need to worry about prerequisite types, putting an I before object prerequisites
+	for _, n := range ns.TopLevelInterfaces {
+		ii := ns.Interfaces[n]
+		if ii.Namespace != ns.Name {		// skip foreign imports
+			continue
+		}
+		goName := ns.GoName(ii)
+		fmt.Fprintf(b, "type %s interface {\n", goName)
+		for _, p := range ii.Prerequisites {
+			fmt.Fprintf(b, "\t%s\n", ns.GoIName(p))
+		}
+		for _, m := range ii.VFuncs {
+			v := ns.VFuncs[m]
+			fmt.Fprintf(b, "\tfunc %s\n", ns.GoFuncSig(v.CallableInfo))
+		}
+		fmt.Fprintf(b, "}\n")
 		fmt.Fprintf(b, "\n")
 	}
 

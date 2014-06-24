@@ -77,12 +77,12 @@ func nsGoFieldValueName(ns string) string {
 			first = true
 			continue
 		}
-		out += string(unicode.ToLower(c))
+		out += string(c)
 	}
 	return out
 }
 
-func (ns Namespace) GoName(i Info) string {
+func (ns Namespace) goName(i Info, iface bool) string {
 	b := i.baseInfo()
 	// first, see if the namespace is different
 	nsprefix := ""
@@ -90,20 +90,37 @@ func (ns Namespace) GoName(i Info) string {
 		nsprefix = nsGoName(b.Namespace) + "."
 	}
 	// now do type-specific options
-	switch x := i.(type) {
-	case EnumInfo:
-		return nsprefix + x.Name
-	case InterfaceInfo:
-		return nsprefix + x.Name
-	case ObjectInfo:
-		return nsprefix + x.Name
-	case StructInfo:
-		return nsprefix + x.Name
-	case UnionInfo:
-		return nsprefix + x.Name
+	switch b.Type {
+	case TypeEnum:
+		return nsprefix + b.Name
+	case TypeInterface:
+		return nsprefix + b.Name
+	case TypeObject:
+		if iface {
+			return nsprefix + "I" + b.Name
+		}
+		return nsprefix + b.Name
+	case TypeStruct:
+		if iface {
+			return nsprefix + "I" + b.Name
+		}
+		return nsprefix + b.Name
+	case TypeUnion:
+		if iface {
+			return nsprefix + "I" + b.Name
+		}
+		return nsprefix + b.Name
 	}
 	// fall back to a guess/the correct answer for values, fields, and what not
 	return nsprefix + nsGoFieldValueName(b.Name)
+}
+
+func (ns Namespace) GoName(i Info) string {
+	return ns.goName(i, false)
+}
+
+func (ns Namespace) GoIName(i Info) string {
+	return ns.goName(i, true)
 }
 
 func firstGoWord(ns string) string {
