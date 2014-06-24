@@ -27,28 +27,29 @@ type Arg struct {
 }
 
 // ArgType is similar to TypeInfo but has pointers resolved
+// TODO we can replace ArgType with TypeInfo now
 type ArgType struct {
 	Namespace	string
 	IsPointer		bool
 	Tag			TypeTag
-	ParamTypes	[]*ArgType
+	ParamTypes	[]ArgType
 	Interface		BaseInfo
 	ArrayType	ArrayType
 }
 
-func (t TypeInfo) argType(ns Namespace) ArgType {
+func (t *TypeInfo) argType() ArgType {
 	tt := ArgType{
 		Namespace:	t.Namespace,
 		IsPointer:		t.IsPointer,
 		Tag:			t.Tag,
-		ParamTypes:	make([]*ArgType, 0, len(t.ParamTypes)),
+//		ParamTypes:	t.ParamTypes,
+ParamTypes:	make([]ArgType, len(t.ParamTypes)),
 		Interface:		t.Interface,
 		ArrayType:	t.ArrayType,
 	}
-	for _, n := range t.ParamTypes {
-		x := ns.Types[n].argType(ns)
-		tt.ParamTypes = append(tt.ParamTypes, &x)
-	}
+for i:=0;i<len(tt.ParamTypes);i++{
+tt.ParamTypes[i]=t.ParamTypes[i].argType()
+}
 	return tt
 }
 
@@ -73,19 +74,19 @@ func receiverArg(to BaseInfo, polymorphic bool, real BaseInfo) Arg {
 	return a
 }
 
-func argumentArg(arg ArgInfo, ns Namespace) Arg {
+func argumentArg(arg *ArgInfo) Arg {
 	return Arg{
 		Name:	arg.Name,
-		Type:	ns.Types[arg.Type].argType(ns),
+		Type:	arg.Type.argType(),
 		Arg:		arg.Direction,
 		Transfer:	arg.OwnershipTransfer,
 	}
 }
 
-func returnArg(t TypeInfo, ns Namespace) Arg {
+func returnArg(t *TypeInfo) Arg {
 	return Arg{
 		Name:	"ret",
-		Type:	t.argType(ns),
+		Type:	t.argType(),
 		Return:	true,
 	}
 }

@@ -29,7 +29,7 @@ func nsCConstName(ns string) string {
 	return strings.ToUpper(nsCFuncName(ns))
 }
 
-func (ns Namespace) CName(i Info) string {
+func CName(i Info) string {
 	b := i.baseInfo()
 	// first, see if there's a "c:identifier" attribute
 	if ident, ok := b.Attributes["c:identifier"]; ok {
@@ -37,19 +37,19 @@ func (ns Namespace) CName(i Info) string {
 	}
 	// now do type-specific options
 	switch x := i.(type) {
-	case FunctionInfo:
+	case *FunctionInfo:
 		return x.Symbol
-	case VFuncInfo:
-		return nsCFuncName(ns.Name + x.Name)
-	case CallableInfo:
-		return nsCFuncName(ns.Name + x.Name)
-	case ConstantInfo:
-		return nsCConstName(ns.Name + x.Name)
-	case ValueInfo:
-		return nsCConstName(ns.Name + x.Name)
+	case *VFuncInfo:
+		return nsCFuncName(namespace + x.Name)
+	case *CallableInfo:
+		return nsCFuncName(namespace + x.Name)
+	case *ConstantInfo:
+		return nsCConstName(namespace + x.Name)
+	case *ValueInfo:
+		return nsCConstName(namespace + x.Name)
 	}
 	// fall back to a guess/the correct answer for objects, interfaces, structs, and unions
-	return ns.Name + b.Name
+	return namespace + b.Name
 }
 
 // the Go package name is just the first letter lowercase
@@ -82,11 +82,11 @@ func nsGoFieldValueName(ns string) string {
 	return out
 }
 
-func (ns Namespace) goName(i Info, iface bool) string {
+func goName(i Info, iface bool) string {
 	b := i.baseInfo()
 	// first, see if the namespace is different
 	nsprefix := ""
-	if b.Namespace != ns.Name {
+	if b.Namespace != namespace {
 		nsprefix = nsGoName(b.Namespace) + "."
 	}
 	// now do type-specific options
@@ -115,12 +115,12 @@ func (ns Namespace) goName(i Info, iface bool) string {
 	return nsprefix + nsGoFieldValueName(b.Name)
 }
 
-func (ns Namespace) GoName(i Info) string {
-	return ns.goName(i, false)
+func GoName(i Info) string {
+	return goName(i, false)
 }
 
-func (ns Namespace) GoIName(i Info) string {
-	return ns.goName(i, true)
+func GoIName(i Info) string {
+	return goName(i, true)
 }
 
 func firstGoWord(ns string) string {

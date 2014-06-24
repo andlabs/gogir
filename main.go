@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"io"
 	"bytes"
-	"sort"
 	"strings"
 )
 
@@ -31,54 +30,12 @@ func main() {
 	if len(os.Args) != 4 { panic("usage: " + os.Args[0] + " repo ver {json|jsoni}") }
 	ns, err := ReadNamespace(os.Args[1], os.Args[2])
 	if err != nil { panic(err) }
+	namespace = ns.Name
 	switch os.Args[3] {
 	case "json":
 		jsonout(os.Stdout, ns)
 	case "jsoni":
 		jsonout(&indenter{os.Stdout}, ns)
-	case "innerobj":
-		objs := make([]ObjectInfo, len(ns.Objects))
-		copy(objs, ns.Objects)
-		sort.Sort(sort.Reverse(sort.IntSlice(ns.TopLevelObjects)))		// TODO should we do this ourselves? (minus the reversing)
-		for _, i := range ns.TopLevelObjects {
-			objs = append(objs[:i], objs[i + 1:]...)
-		}
-		jsonout(&indenter{os.Stdout}, objs)
-	case "allconsts":
-		for i, _ := range ns.Constants {
-			fmt.Println(ns.ConstantToGo(i))
-		}
-	case "allfields":
-		for i, _ := range ns.Fields {
-			fmt.Println(ns.FieldToGo(i))
-		}
-	// TODO properties
-	case "allobjects":
-		for i, _ := range ns.Objects {
-			fmt.Println(ns.ObjectToGo(i))
-		}
-	case "allstructs":
-		for i, _ := range ns.Structs {
-			fmt.Println(ns.StructToGo(i))
-		}
-	case "allunions":
-		for i, _ := range ns.Unions {
-			fmt.Println(ns.UnionToGo(i))
-		}
-	case "alltypes":
-		for i, _ := range ns.Types {
-			fmt.Println(ns.TypeToGo(i))
-		}
-	case "badtypes":
-		for i, _ := range ns.Types {
-			s := ns.TypeToGo(i)
-			if s == "" {
-				t := ns.Types[i]
-				if t.Tag != TagVoid && !t.IsPointer {		// skip void returns
-					fmt.Printf("%d %#v\n", i, ns.Types[i])
-				}
-			}
-		}
 	case "gen":
 		generate(ns)
 	default:
@@ -87,22 +44,17 @@ func main() {
 	}
 }
 
-func (ns Namespace) ArgToGo(n int) string {
-	arg := ns.Args[n]
-	return ns.ArgValueToGo(arg, ns.Types[arg.Type], true)
+func ArgToGo(arg *ArgInfo, isArg bool) string {
+	return fmt.Sprintf("%s %s", arg.Name, TypeToGo(arg.Type, isArg))
 }
 
-func (ns Namespace) ArgValueToGo(arg ArgInfo, argtype TypeInfo, isArg bool) string {
-	return fmt.Sprintf("%s %s", arg.Name, ns.TypeValueToGo(argtype, isArg))
-}
-
-func (ns Namespace) GoFuncSig(ci CallableInfo) string {
-	s := ns.GoName(ci) + "("
+func GoFuncSig(ci CallableInfo) string {
+	s := GoName(ci) + "("
 	for _, i := range ci.Args {
-		s += ns.ArgToGo(i) + ", "
+		s += ArgToGo(i, true) + ", "
 	}
 	s += ")"
-	ret := ns.TypeToGo(ci.ReturnType)
+	ret := TypeToGo(ci.ReturnType, false)
 	if ret != "" {
 		s += " (ret " + ret + ")"
 	}
@@ -110,88 +62,37 @@ func (ns Namespace) GoFuncSig(ci CallableInfo) string {
 	return s
 }
 
-func (ns Namespace) ConstantToGo(n int) string {
-	c := ns.Constants[n]
-	if c.Namespace != ns.Name {
+func ConstantToGo(c *ConstantInfo) string {
+	if c.Namespace != namespace {
 		return "// " + c.Name + " external; skip"
 	}
-	s := "const " + ns.GoName(c) + " " + ns.TypeToGo(c.Type) + " = "
-	s += "C." + ns.CName(c)
+	s := "const " + GoName(c) + " " + TypeToGo(c.Type, false) + " = "
+	s += "C." + CName(c)
 	return s
 }
 
-func (ns Namespace) FieldToGo(n int) string {
-	f := ns.Fields[n]
-	if f.Namespace != ns.Name {
+func FieldToGo(f *FieldInfo) string {
+	if f.Namespace != namespace {
 		return "\t// " + f.Name + " external; skip"
 	}
-	s := "\t" + ns.GoName(f) + " " + ns.TypeToGo(f.Type)
+	s := "\t" + GoName(f) + " " + TypeToGo(f.Type, false)
 	return s
 }
 
-func (ns Namespace) ObjectToGo(n int) string {
-	o := ns.Objects[n]
-	if o.Namespace != ns.Name {
-		return "// " + o.Name + " external; skip"
-	}
-	s := "type " + ns.GoName(o) + " struct {\n"
-	if o.Parent != -1 {
-		s += "\t" + ns.GoName(ns.Objects[o.Parent]) + "\n"
-	}
-	s += "\t// interfaces\n"
-	for _, n := range o.Interfaces {
-		i := ns.Interfaces[n]
-		s += "\t" + ns.GoName(i) + "\n"
-	}
-	s += "\t//fields\n"
-	for _, n := range o.Fields {
-		s += ns.FieldToGo(n) + "\n"
-	}
-	s += "}\n"
-	s += "// methods\n"
-	// TODO Struct
-	for _, n := range o.Constants {
-		s += ns.ConstantToGo(n) + "\n"
-	}
-	// TODO the four functions
-	return s
-}
-
-func (ns Namespace) StructToGo(n int) string {
-	st := ns.Structs[n]
-	if st.Namespace != ns.Name {
-		return "// " + st.Name + " external; skip"
-	}
-	s := "type " + ns.GoName(st) + " struct {\n"
-	if st.IsClassStruct {
-		s += "\t// class structure\n"
-	}
-	for _, n := range st.Fields {
-		s += ns.FieldToGo(n) + "\n"
-	}
-	s += "}\n"
-	return s
-}
-
-func (ns Namespace) UnionToGo(n int) string {
-	u := ns.Unions[n]
-	if u.Namespace != ns.Name {
+func UnionToGo(u *UnionInfo) string {
+	if u.Namespace != namespace {
 		return "// " + u.Name + " external; skip"
 	}
-	s := "type " + ns.GoName(u) + " struct {\n"
+	s := "type " + GoName(u) + " struct {\n"
 	s += "\t//union\n"
 	for _, n := range u.Fields {
-		s += ns.FieldToGo(n) + "\n"
+		s += FieldToGo(n) + "\n"
 	}
 	s += "}\n"
 	return s
 }
 
-func (ns Namespace) TypeToGo(n int) string {
-	return ns.TypeValueToGo(ns.Types[n], false)
-}
-
-func (ns Namespace) TypeValueToGo(t TypeInfo, isArg bool) string {
+func TypeToGo(t *TypeInfo, isArg bool) string {
 	s := ""
 	if t.IsPointer {
 		switch t.Tag {
@@ -249,17 +150,17 @@ func (ns Namespace) TypeValueToGo(t TypeInfo, isArg bool) string {
 		switch t.ArrayType {
 		case CArray, GArray:
 			s += "[]"
-			s += ns.TypeToGo(t.ParamTypes[0])
+			s += TypeToGo(t.ParamTypes[0], false)
 		case GPtrArray:
 			s += "[]*"
-			s += ns.TypeToGo(t.ParamTypes[0])
+			s += TypeToGo(t.ParamTypes[0], false)
 		case GByteArray:
 			s += "[]byte"
 		default:
 			panic(fmt.Errorf("unknown array type %d", t.ArrayType))
 		}
 	case TagInterface:
-		if t.Interface.Namespace != ns.Name {
+		if t.Interface.Namespace != namespace {
 			s += strings.ToLower(t.Interface.Namespace) + "."
 		}
 		if isArg {		// arguments become the equivalent interfaces
@@ -271,27 +172,27 @@ func (ns Namespace) TypeValueToGo(t TypeInfo, isArg bool) string {
 		s += t.Interface.Name
 	case TagGList:
 		s += "[]"
-		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
+		if t.ParamTypes[0].GContainerStorePointer() {
 			s += "*"
 		}
-		s += ns.TypeToGo(t.ParamTypes[0])
+		s += TypeToGo(t.ParamTypes[0], false)
 	case TagGSList:
 		s += "[]"
-		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
+		if t.ParamTypes[0].GContainerStorePointer() {
 			s += "*"
 		}
-		s += ns.TypeToGo(t.ParamTypes[0])
+		s += TypeToGo(t.ParamTypes[0], false)
 	case TagGHashTable:
 		s += "map["
-		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
+		if t.ParamTypes[0].GContainerStorePointer() {
 			s += "*"
 		}
-		s += ns.TypeToGo(t.ParamTypes[0])
+		s += TypeToGo(t.ParamTypes[0], false)
 		s += "]"
-		if ns.Types[t.ParamTypes[1]].GContainerStorePointer() {
+		if t.ParamTypes[1].GContainerStorePointer() {
 			s += "*"
 		}
-		s += ns.TypeToGo(t.ParamTypes[1])
+		s += TypeToGo(t.ParamTypes[1], false)
 	case TagGError:
 		s += "error"
 	case TagUnichar:
@@ -304,7 +205,7 @@ func (ns Namespace) TypeValueToGo(t TypeInfo, isArg bool) string {
 
 // for GList, GSList, and GHashTable, whether the stored type is a pointer is not stored; use this function to find out
 // interfaces become Go interfaces which are /references/, so don't make htem pointers either
-func (t TypeInfo) GContainerStorePointer() bool {
+func (t *TypeInfo) GContainerStorePointer() bool {
 	return t.Tag == TagInterface && t.Interface.Type != TypeInterface
 }
 

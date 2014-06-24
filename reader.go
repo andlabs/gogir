@@ -11,9 +11,6 @@ import (
 // #include <stdlib.h>
 import "C"
 
-// TODOs
-// - change int used for pointers to some named type
-
 type InfoType int
 const (
 	TypeInvalid InfoType = C.GI_INFO_TYPE_INVALID
@@ -40,35 +37,14 @@ const (
 
 type reader struct {
 	ns			*Namespace
-	baseInfos		map[*C.GIBaseInfo]int
 	unref		[]*C.GIBaseInfo
 }
 
 func newReader(ns *Namespace) (r *reader) {
 	r = new(reader)
 	r.ns = ns
-	r.baseInfos = map[*C.GIBaseInfo]int{}
 	r.unref = make([]*C.GIBaseInfo, 0, 65536)
 	return r
-}
-
-func (r *reader) find(info *C.GIBaseInfo) (n int) {
-	n = -1
-	for i, v := range r.baseInfos {
-		if C.g_base_info_equal(info, i) != C.FALSE {
-			n = v
-			break
-		}
-	}
-	if n != -1 {
-		r.baseInfos[info] = n		// add for next time
-	}
-	return n
-}
-
-func (r *reader) found(info *C.GIBaseInfo, n int) int {
-	r.baseInfos[info] = n
-	return n
 }
 
 func (r *reader) queueUnref(info *C.GIBaseInfo) {
@@ -104,14 +80,7 @@ func fromgbool(b C.gboolean) bool {
 	return b != C.FALSE
 }
 
-func (r *reader) readBaseInfo(info *C.GIBaseInfo, out *BaseInfo) int {
-	toplevel := out == nil
-	if toplevel {
-		if n := r.find(info); n != -1 {
-			return n
-		}
-	}
-
+func (r *reader) readBaseInfo(info *C.GIBaseInfo, out *BaseInfo) BaseInfo {
 	var iter C.GIAttributeIter		// properly initializes
 	var name, value *C.char
 
@@ -133,11 +102,7 @@ func (r *reader) readBaseInfo(info *C.GIBaseInfo, out *BaseInfo) int {
 		}
 	}
 	out.Deprecated = fromgbool(C.g_base_info_is_deprecated(info))
-	if toplevel {
-		r.ns.OtherBaseInfos = append(r.ns.OtherBaseInfos, *out)
-		return r.found(info, len(r.ns.OtherBaseInfos) -1)
-	}
-	return -1
+	return *out
 }
 
 type Direction int
@@ -169,7 +134,7 @@ type ArgInfo struct {
 	Direction			Direction
 	OwnershipTransfer	Transfer
 	Scope			ScopeType
-	Type				int
+	Type				*TypeInfo
 	MayBeNull		bool
 	CallerAllocates		bool
 	Optional			bool
@@ -177,12 +142,8 @@ type ArgInfo struct {
 	OnlyUsefulForC	bool
 }
 
-func (r *reader) readArgInfo(info *C.GIArgInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := ArgInfo{}
+func (r *reader) readArgInfo(info *C.GIArgInfo) *ArgInfo {
+	out := &ArgInfo{}
 	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.Closure = int(C.g_arg_info_get_closure(info))
 	out.Destroy = int(C.g_arg_info_get_destroy(info))
@@ -197,30 +158,22 @@ func (r *reader) readArgInfo(info *C.GIArgInfo) int {
 	out.Optional = fromgbool(C.g_arg_info_is_optional(info))
 	out.IsReturnValue = fromgbool(C.g_arg_info_is_return_value(info))
 	out.OnlyUsefulForC = fromgbool(C.g_arg_info_is_skip(info))
-	r.ns.Args = append(r.ns.Args, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Args) - 1)
+	return out
 }
 
 type CallableInfo struct {
 	BaseInfo
 	CanThrowGError		bool
-	Args					[]int
+	Args					[]*ArgInfo
 	ReturnTransfer			Transfer
 	ReturnAttributes		map[string]string
-	ReturnType			int
+	ReturnType			*TypeInfo
 	IsMethod				bool
 	MayReturnNull			bool
 	ReturnOnlyUsefulForC	bool
 }
 
-func (r *reader) readCallableInfo(info *C.GICallableInfo, out *CallableInfo) int {
-	toplevel := out == nil
-	if toplevel {
-		if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-			return n
-		}
-	}
-
+func (r *reader) readCallableInfo(info *C.GICallableInfo, out *CallableInfo) *CallableInfo {
 	var iter C.GIAttributeIter		// properly initializes
 	var name, value *C.char
 
@@ -230,7 +183,7 @@ func (r *reader) readCallableInfo(info *C.GICallableInfo, out *CallableInfo) int
 	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.CanThrowGError = fromgbool(C.g_callable_info_can_throw_gerror(info))
 	n := int(C.g_callable_info_get_n_args(info))
-	out.Args = make([]int, n)
+	out.Args = make([]*ArgInfo, n)
 	for i := 0; i < n; i++ {
 		ai := C.g_callable_info_get_arg(info, C.gint(i))
 		out.Args[i] = r.readArgInfo(ai)
@@ -247,11 +200,7 @@ func (r *reader) readCallableInfo(info *C.GICallableInfo, out *CallableInfo) int
 	out.IsMethod = fromgbool(C.g_callable_info_is_method(info))
 	out.MayReturnNull = fromgbool(C.g_callable_info_may_return_null(info))
 	out.ReturnOnlyUsefulForC = fromgbool(C.g_callable_info_skip_return(info))
-	if toplevel {
-		r.ns.Callbacks = append(r.ns.Callbacks, *out)
-		return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Callbacks) - 1)
-	}
-	return -1		// irrelevant
+	return out
 }
 
 type FunctionInfoFlags int
@@ -267,20 +216,15 @@ const (
 type FunctionInfo struct {
 	CallableInfo
 	Flags		FunctionInfoFlags
-	Property		int
+	Property		*PropertyInfo
 	Symbol		string
-	VFunc		int
+	VFunc		*VFuncInfo
 }
 
-func (r *reader) readFunctionInfo(info *C.GIFunctionInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := FunctionInfo{}
+func (r *reader) readFunctionInfo(info *C.GIFunctionInfo) *FunctionInfo {
+	out := &FunctionInfo{}
 	r.readCallableInfo((*C.GICallableInfo)(unsafe.Pointer(info)), &out.CallableInfo)
 	out.Flags = FunctionInfoFlags(C.g_function_info_get_flags(info))
-	out.Property = -1
 	if (out.Flags & (FunctionIsGetter | FunctionIsSetter)) != 0 {
 		pi := C.g_function_info_get_property(info)
 		if pi != nil {
@@ -289,7 +233,6 @@ func (r *reader) readFunctionInfo(info *C.GIFunctionInfo) int {
 		}
 	}
 	out.Symbol = fromgstr(C.g_function_info_get_symbol(info))
-	out.VFunc = -1
 	if (out.Flags & FunctionWrapsVFunc) != 0 {
 		vi := C.g_function_info_get_vfunc(info)
 		if vi != nil {
@@ -297,8 +240,7 @@ func (r *reader) readFunctionInfo(info *C.GIFunctionInfo) int {
 			r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
 		}
 	}
-	r.ns.Functions = append(r.ns.Functions, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Functions) - 1)
+	return out
 }
 
 // Note: this is a GObject enum, not a GObject Introspection enum
@@ -318,27 +260,21 @@ const (
 type SignalInfo struct {
 	CallableInfo
 	Flags			SignalFlags
-	ClassClosure		int
+	ClassClosure		*VFuncInfo
 	TrueStopsEmit		bool
 }
 
-func (r *reader) readSignalInfo(info *C.GISignalInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := SignalInfo{}
+func (r *reader) readSignalInfo(info *C.GISignalInfo) *SignalInfo {
+	out := &SignalInfo{}
 	r.readCallableInfo((*C.GICallableInfo)(unsafe.Pointer(info)), &out.CallableInfo)
 	out.Flags = SignalFlags(C.g_signal_info_get_flags(info))
-	out.ClassClosure = -1
 	vi := C.g_signal_info_get_class_closure(info)
 	if vi != nil {
 		out.ClassClosure = r.readVFuncInfo(vi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
 	}
 	out.TrueStopsEmit = fromgbool(C.g_signal_info_true_stops_emit(info))
-	r.ns.Signals = append(r.ns.Signals, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Signals) - 1)
+	return out
 }
 
 type VFuncInfoFlags int
@@ -353,52 +289,41 @@ type VFuncInfo struct {
 	CallableInfo
 	Flags		VFuncInfoFlags
 	Offset		int
-	Signal		int
-	Invoker		int
+	Signal		*SignalInfo
+	Invoker		*FunctionInfo
 	// skip Address; that requires a GType
 }
 
-func (r *reader) readVFuncInfo(info *C.GIVFuncInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := VFuncInfo{}
+func (r *reader) readVFuncInfo(info *C.GIVFuncInfo) *VFuncInfo {
+	out := &VFuncInfo{}
 	r.readCallableInfo((*C.GICallableInfo)(unsafe.Pointer(info)), &out.CallableInfo)
 	out.Flags = VFuncInfoFlags(C.g_vfunc_info_get_flags(info))
 	out.Offset = int(C.g_vfunc_info_get_offset(info))
-	out.Signal = -1
 	si := C.g_vfunc_info_get_signal(info)
 	if si != nil {
 		out.Signal = r.readSignalInfo(si)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(si)))
 	}
-	out.Invoker = -1
 	fi := C.g_vfunc_info_get_invoker(info)
 	if si != nil {
 		out.Invoker = r.readFunctionInfo(fi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 	}
 	// skip Address; that requires a GType
-	r.ns.VFuncs = append(r.ns.VFuncs, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.VFuncs) - 1)
+	return out
 }
 
 type ConstantInfo struct {
 	BaseInfo
-	Type			int
+	Type			*TypeInfo
 	Value		[]byte		// assume this is little-endian for now
 	StringValue	string
 }
 
-func (r *reader) readConstantInfo(info *C.GIConstantInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
+func (r *reader) readConstantInfo(info *C.GIConstantInfo) *ConstantInfo {
 	var value C.GIArgument
 
-	out := ConstantInfo{}
+	out := &ConstantInfo{}
 	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	ti := C.g_constant_info_get_type(info)
 	out.Type = r.readTypeInfo(ti)
@@ -408,8 +333,7 @@ func (r *reader) readConstantInfo(info *C.GIConstantInfo) int {
 	out.Value = make([]byte, n)
 	copy(out.Value, value[:])
 	C.g_constant_info_free_value(info, &value)
-	r.ns.Constants = append(r.ns.Constants, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Constants) - 1)
+	return out
 }
 
 type FieldInfoFlags int
@@ -423,15 +347,11 @@ type FieldInfo struct {
 	Flags		FieldInfoFlags
 	Offset		int
 	Size			int
-	Type			int
+	Type			*TypeInfo
 }
 
-func (r *reader) readFieldInfo(info *C.GIFieldInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := FieldInfo{}
+func (r *reader) readFieldInfo(info *C.GIFieldInfo) *FieldInfo {
+	out := &FieldInfo{}
 	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.Flags = FieldInfoFlags(C.g_field_info_get_flags(info))
 	out.Offset = int(C.g_field_info_get_offset(info))
@@ -439,8 +359,7 @@ func (r *reader) readFieldInfo(info *C.GIFieldInfo) int {
 	ti := C.g_field_info_get_type(info)
 	out.Type = r.readTypeInfo(ti)
 	r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(ti)))
-	r.ns.Fields = append(r.ns.Fields, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Fields) - 1)
+	return out
 }
 
 // Note: this is a GObject enum, not a GObject Introspection enum
@@ -464,23 +383,18 @@ type PropertyInfo struct {
 	BaseInfo
 	Flags		ParamFlags
 	Transfer		Transfer
-	Type			int
+	Type			*TypeInfo
 }
 
-func (r *reader) readPropertyInfo(info *C.GIPropertyInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := PropertyInfo{}
+func (r *reader) readPropertyInfo(info *C.GIPropertyInfo) *PropertyInfo {
+	out := &PropertyInfo{}
 	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.Flags = ParamFlags(C.g_property_info_get_flags(info))
 	out.Transfer = Transfer(C.g_property_info_get_ownership_transfer(info))
 	ti := C.g_property_info_get_type(info)
 	out.Type = r.readTypeInfo(ti)
 	r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(ti)))
-	r.ns.Properties = append(r.ns.Properties, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Properties) - 1)
+	return out
 }
 
 type RegisteredTypeInfo struct {
@@ -503,15 +417,11 @@ type ValueInfo struct {
 	Value		int64
 }
 
-func (r *reader) readValueInfo(info *C.GIValueInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-	out := ValueInfo{}
+func (r *reader) readValueInfo(info *C.GIValueInfo) *ValueInfo {
+	out := &ValueInfo{}
 	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.Value = int64(C.g_value_info_get_value(info))
-	r.ns.Values = append(r.ns.Values, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Values) - 1)
+	return out
 }
 
 type TypeTag int
@@ -542,32 +452,26 @@ const (
 
 type EnumInfo struct {
 	RegisteredTypeInfo
-	Values				[]int
-	Methods				[]int
+	Values				[]*ValueInfo
+	Methods				[]*FunctionInfo
 	StorageType			TypeTag
 	ErrorDomain			string
 }
 
-func (r *reader) readEnumInfo(info *C.GIEnumInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := EnumInfo{}
+func (r *reader) readEnumInfo(info *C.GIEnumInfo) *EnumInfo {
+	out := &EnumInfo{}
 	readRegisteredTypeInfo((*C.GIRegisteredTypeInfo)(unsafe.Pointer(info)), &out.RegisteredTypeInfo)
 	n := int(C.g_enum_info_get_n_values(info))
-	out.Values = make([]int, n)
+	out.Values = make([]*ValueInfo, n)
 	for i := 0; i < n; i++ {
 		vi := C.g_enum_info_get_value(info, C.gint(i))
 		if vi != nil {
 			out.Values[i] = r.readValueInfo(vi)
 			r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
-		} else {
-			out.Values[i] = -1
 		}
 	}
 	n = int(C.g_enum_info_get_n_methods(info))
-	out.Methods = make([]int, n)
+	out.Methods = make([]*FunctionInfo, n)
 	for i := 0; i < n; i++ {
 		fi := C.g_enum_info_get_method(info, C.gint(i))
 		out.Methods[i] = r.readFunctionInfo(fi)
@@ -578,27 +482,22 @@ func (r *reader) readEnumInfo(info *C.GIEnumInfo) int {
 	if ed != nil {
 		out.ErrorDomain = fromgstr(ed)
 	}
-	r.ns.Enums = append(r.ns.Enums, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Enums) - 1)
+	return out
 }
 
 type InterfaceInfo struct {
 	RegisteredTypeInfo
 	Prerequisites			[]BaseInfo
-	Properties				[]int
-	Methods				[]int
-	Signals				[]int
-	VFuncs				[]int
-	Constants				[]int
-	Struct				int
+	Properties				[]*PropertyInfo
+	Methods				[]*FunctionInfo
+	Signals				[]*SignalInfo
+	VFuncs				[]*VFuncInfo
+	Constants				[]*ConstantInfo
+	Struct				*StructInfo
 }
 
-func (r *reader) readInterfaceInfo(info *C.GIInterfaceInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := InterfaceInfo{}
+func (r *reader) readInterfaceInfo(info *C.GIInterfaceInfo) *InterfaceInfo {
+	out := &InterfaceInfo{}
 	readRegisteredTypeInfo((*C.GIRegisteredTypeInfo)(unsafe.Pointer(info)), &out.RegisteredTypeInfo)
 	n := int(C.g_interface_info_get_n_prerequisites(info))
 	out.Prerequisites = make([]BaseInfo, n)
@@ -608,81 +507,74 @@ func (r *reader) readInterfaceInfo(info *C.GIInterfaceInfo) int {
 		r.queueUnref(bi)
 	}
 	n = int(C.g_interface_info_get_n_properties(info))
-	out.Properties = make([]int, n)
+	out.Properties = make([]*PropertyInfo, n)
 	for i := 0; i < n; i++ {
 		pi := C.g_interface_info_get_property(info, C.gint(i))
 		out.Properties[i] = r.readPropertyInfo(pi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(pi)))
 	}
 	n = int(C.g_interface_info_get_n_methods(info))
-	out.Methods = make([]int, n)
+	out.Methods = make([]*FunctionInfo, n)
 	for i := 0; i < n; i++ {
 		fi := C.g_interface_info_get_method(info, C.gint(i))
 		out.Methods[i] = r.readFunctionInfo(fi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 	}
 	n = int(C.g_interface_info_get_n_signals(info))
-	out.Signals = make([]int, n)
+	out.Signals = make([]*SignalInfo, n)
 	for i := 0; i < n; i++ {
 		si := C.g_interface_info_get_signal(info, C.gint(i))
 		out.Signals[i] = r.readSignalInfo(si)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(si)))
 	}
 	n = int(C.g_interface_info_get_n_vfuncs(info))
-	out.VFuncs = make([]int, n)
+	out.VFuncs = make([]*VFuncInfo, n)
 	for i := 0; i < n; i++ {
 		vi := C.g_interface_info_get_vfunc(info, C.gint(i))
 		out.VFuncs[i] = r.readVFuncInfo(vi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
 	}
 	n = int(C.g_interface_info_get_n_constants(info))
-	out.Constants = make([]int, n)
+	out.Constants = make([]*ConstantInfo, n)
 	for i := 0; i < n; i++ {
 		ci := C.g_interface_info_get_constant(info, C.gint(i))
 		out.Constants[i] = r.readConstantInfo(ci)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(ci)))
 	}
-	out.Struct = -1
 	si := C.g_interface_info_get_iface_struct(info)
 	if si != nil {
 		out.Struct = r.readStructInfo(si)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(si)))
 	}
-	r.ns.Interfaces = append(r.ns.Interfaces, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Interfaces) - 1)
+	return out
 }
 
 type ObjectInfo struct {
 	RegisteredTypeInfo
 	IsAbstract				bool
 	IsFundamental			bool
-	Parent				int
+	Parent				*ObjectInfo
 	Name				string
 	Init					string
-	Constants				[]int
-	Fields				[]int
-	Interfaces				[]int
-	Methods				[]int
-	Properties				[]int
-	Signals				[]int
-	VFuncs				[]int
-	Struct				int
+	Constants				[]*ConstantInfo
+	Fields				[]*FieldInfo
+	Interfaces				[]*InterfaceInfo
+	Methods				[]*FunctionInfo
+	Properties				[]*PropertyInfo
+	Signals				[]*SignalInfo
+	VFuncs				[]*VFuncInfo
+	Struct				*StructInfo
 	RefFunction			string
 	UnrefFunction			string
 	SetValueFunction		string
 	GetValueFunction		string
 }
 
-func (r *reader) readObjectInfo(info *C.GIObjectInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := ObjectInfo{}
+func (r *reader) readObjectInfo(info *C.GIObjectInfo) *ObjectInfo {
+	out := &ObjectInfo{}
 	readRegisteredTypeInfo((*C.GIRegisteredTypeInfo)(unsafe.Pointer(info)), &out.RegisteredTypeInfo)
 	out.IsAbstract = fromgbool(C.g_object_info_get_abstract(info))
 	out.IsFundamental = fromgbool(C.g_object_info_get_fundamental(info))
-	out.Parent = -1
 	oi := C.g_object_info_get_parent(info)
 	if oi != nil {
 		out.Parent = r.readObjectInfo(oi)
@@ -691,55 +583,54 @@ func (r *reader) readObjectInfo(info *C.GIObjectInfo) int {
 	out.Name = fromgstr(C.g_object_info_get_type_name(info))
 	out.Init = fromgstr(C.g_object_info_get_type_init(info))
 	n := int(C.g_object_info_get_n_constants(info))
-	out.Constants = make([]int, n)
+	out.Constants = make([]*ConstantInfo, n)
 	for i := 0; i < n; i++ {
 		ci := C.g_object_info_get_constant(info, C.gint(i))
 		out.Constants[i] = r.readConstantInfo(ci)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(ci)))
 	}
 	n = int(C.g_object_info_get_n_fields(info))
-	out.Fields = make([]int, n)
+	out.Fields = make([]*FieldInfo, n)
 	for i := 0; i < n; i++ {
 		fi := C.g_object_info_get_field(info, C.gint(i))
 		out.Fields[i] = r.readFieldInfo(fi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 	}
 	n = int(C.g_object_info_get_n_interfaces(info))
-	out.Interfaces = make([]int, n)
+	out.Interfaces = make([]*InterfaceInfo, n)
 	for i := 0; i < n; i++ {
 		ii := C.g_object_info_get_interface(info, C.gint(i))
 		out.Interfaces[i] = r.readInterfaceInfo(ii)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(ii)))
 	}
 	n = int(C.g_object_info_get_n_methods(info))
-	out.Methods = make([]int, n)
+	out.Methods = make([]*FunctionInfo, n)
 	for i := 0; i < n; i++ {
 		fi := C.g_object_info_get_method(info, C.gint(i))
 		out.Methods[i] = r.readFunctionInfo(fi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 	}
 	n = int(C.g_object_info_get_n_properties(info))
-	out.Properties = make([]int, n)
+	out.Properties = make([]*PropertyInfo, n)
 	for i := 0; i < n; i++ {
 		pi := C.g_object_info_get_property(info, C.gint(i))
 		out.Properties[i] = r.readPropertyInfo(pi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(pi)))
 	}
 	n = int(C.g_object_info_get_n_signals(info))
-	out.Signals = make([]int, n)
+	out.Signals = make([]*SignalInfo, n)
 	for i := 0; i < n; i++ {
 		si := C.g_object_info_get_signal(info, C.gint(i))
 		out.Signals[i] = r.readSignalInfo(si)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(si)))
 	}
 	n = int(C.g_object_info_get_n_vfuncs(info))
-	out.VFuncs = make([]int, n)
+	out.VFuncs = make([]*VFuncInfo, n)
 	for i := 0; i < n; i++ {
 		vi := C.g_object_info_get_vfunc(info, C.gint(i))
 		out.VFuncs[i] = r.readVFuncInfo(vi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(vi)))
 	}
-	out.Struct = -1
 	si := C.g_object_info_get_class_struct(info)
 	if si != nil {
 		out.Struct = r.readStructInfo(si)
@@ -749,8 +640,7 @@ func (r *reader) readObjectInfo(info *C.GIObjectInfo) int {
 	out.UnrefFunction = C.GoString(C.g_object_info_get_unref_function(info))
 	out.SetValueFunction = C.GoString(C.g_object_info_get_set_value_function(info))
 	out.GetValueFunction = C.GoString(C.g_object_info_get_get_value_function(info))
-	r.ns.Objects = append(r.ns.Objects, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Objects) - 1)
+	return out
 }
 
 type StructInfo struct {
@@ -759,67 +649,57 @@ type StructInfo struct {
 	Size					uintptr
 	IsClassStruct			bool
 	Foreign				bool
-	Fields				[]int
-	Methods				[]int
+	Fields				[]*FieldInfo
+	Methods				[]*FunctionInfo
 }
 
-func (r *reader) readStructInfo(info *C.GIStructInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := StructInfo{}
+func (r *reader) readStructInfo(info *C.GIStructInfo) *StructInfo {
+	out := &StructInfo{}
 	readRegisteredTypeInfo((*C.GIRegisteredTypeInfo)(unsafe.Pointer(info)), &out.RegisteredTypeInfo)
 	out.Alignment = uintptr(C.g_struct_info_get_alignment(info))
 	out.Size = uintptr(C.g_struct_info_get_size(info))
 	out.IsClassStruct = fromgbool(C.g_struct_info_is_gtype_struct(info))
 	out.Foreign = fromgbool(C.g_struct_info_is_foreign(info))
 	n := int(C.g_struct_info_get_n_fields(info))
-	out.Fields = make([]int, n)
+	out.Fields = make([]*FieldInfo, n)
 	for i := 0; i < n; i++ {
 		fi := C.g_struct_info_get_field(info, C.gint(i))
 		out.Fields[i] = r.readFieldInfo(fi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 	}
 	n = int(C.g_struct_info_get_n_methods(info))
-	out.Methods = make([]int, n)
+	out.Methods = make([]*FunctionInfo, n)
 	for i := 0; i < n; i++ {
 		fi := C.g_struct_info_get_method(info, C.gint(i))
 		out.Methods[i] = r.readFunctionInfo(fi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 	}
-	r.ns.Structs = append(r.ns.Structs, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Structs) - 1)
+	return out
 }
 
 type UnionInfo struct {
 	RegisteredTypeInfo
-	Fields				[]int
-	Methods				[]int
+	Fields				[]*FieldInfo
+	Methods				[]*FunctionInfo
 	Discriminated			bool
 	DiscriminatorOffset		int
-	DiscriminatorType		int
-	DiscriminatorValues		[]int
+	DiscriminatorType		*TypeInfo
+	DiscriminatorValues		[]*ConstantInfo
 	Size					uintptr
 	Alignment			uintptr
 }
 
-func (r *reader) readUnionInfo(info *C.GIUnionInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := UnionInfo{}
+func (r *reader) readUnionInfo(info *C.GIUnionInfo) *UnionInfo {
+	out := &UnionInfo{}
 	readRegisteredTypeInfo((*C.GIRegisteredTypeInfo)(unsafe.Pointer(info)), &out.RegisteredTypeInfo)
 	n := int(C.g_union_info_get_n_fields(info))
-	out.Fields = make([]int, n)
-	out.DiscriminatorValues = make([]int, n)
+	out.Fields = make([]*FieldInfo, n)
+	out.DiscriminatorValues = make([]*ConstantInfo, n)
 	for i := 0; i < n; i++ {
 		fi := C.g_union_info_get_field(info, C.gint(i))
 		out.Fields[i] = r.readFieldInfo(fi)
 		r.queueUnref((*C.GIBaseInfo)(unsafe.Pointer(fi)))
 		// do discriminator values here too
-		out.DiscriminatorValues[i] = -1
 		ci := C.g_union_info_get_discriminator(info, C.gint(i))
 		if ci != nil {		// TODO this should probably just be a skip of the whole thing if there is no discriminator but meh
 			out.DiscriminatorValues[i] = r.readConstantInfo(ci)
@@ -827,7 +707,7 @@ func (r *reader) readUnionInfo(info *C.GIUnionInfo) int {
 		}
 	}
 	n = int(C.g_union_info_get_n_methods(info))
-	out.Methods = make([]int, n)
+	out.Methods = make([]*FunctionInfo, n)
 	for i := 0; i < n; i++ {
 		fi := C.g_union_info_get_method(info, C.gint(i))
 		out.Methods[i] = r.readFunctionInfo(fi)
@@ -841,8 +721,7 @@ func (r *reader) readUnionInfo(info *C.GIUnionInfo) int {
 	// discriminator values handled above
 	out.Size = uintptr(C.g_union_info_get_size(info))
 	out.Alignment = uintptr(C.g_union_info_get_alignment(info))
-	r.ns.Unions = append(r.ns.Unions, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Unions) - 1)
+	return out
 }
 
 type ArrayType int
@@ -857,7 +736,7 @@ type TypeInfo struct {
 	BaseInfo
 	IsPointer			bool
 	Tag				TypeTag
-	ParamTypes		[]int
+	ParamTypes		[]*TypeInfo
 	Interface			BaseInfo
 	ArrayLength		int
 	ArrayFixedSize		int
@@ -865,12 +744,8 @@ type TypeInfo struct {
 	ArrayType		ArrayType
 }
 
-func (r *reader) readTypeInfo(info *C.GITypeInfo) int {
-	if n := r.find((*C.GIBaseInfo)(unsafe.Pointer(info))); n != -1 {
-		return n
-	}
-
-	out := TypeInfo{}
+func (r *reader) readTypeInfo(info *C.GITypeInfo) *TypeInfo {
+	out := &TypeInfo{}
 	r.readBaseInfo((*C.GIBaseInfo)(unsafe.Pointer(info)), &out.BaseInfo)
 	out.IsPointer = fromgbool(C.g_type_info_is_pointer(info))
 	out.Tag = TypeTag(C.g_type_info_get_tag(info))
@@ -882,7 +757,7 @@ func (r *reader) readTypeInfo(info *C.GITypeInfo) int {
 	case TagGHashTable:
 		n = 2
 	}
-	out.ParamTypes = make([]int, n)
+	out.ParamTypes = make([]*TypeInfo, n)
 	for i := 0; i < n; i++ {
 		ti := C.g_type_info_get_param_type(info, C.gint(i))
 		out.ParamTypes[i] = r.readTypeInfo(ti)
@@ -899,56 +774,32 @@ func (r *reader) readTypeInfo(info *C.GITypeInfo) int {
 		out.IsZeroTerminated = fromgbool(C.g_type_info_is_zero_terminated(info))
 		out.ArrayType = ArrayType(C.g_type_info_get_array_type(info))
 	}
-	r.ns.Types = append(r.ns.Types, out)
-	return r.found((*C.GIBaseInfo)(unsafe.Pointer(info)), len(r.ns.Types) - 1)
+	return out
 }
 
 type Namespace struct {
 	Name			string
 	// TODO other fields
-	OtherBaseInfos		[]BaseInfo		// invalids, invalid0s, unresolveds
-	// Invalids in OtherBaseInfos
-	Functions			[]FunctionInfo
-	Callbacks			[]CallableInfo
-	Structs			[]StructInfo
-	// TODO Boxed
-	Enums			[]EnumInfo
-	// TODO Flags
-	Objects			[]ObjectInfo
-	Interfaces			[]InterfaceInfo
-	Constants			[]ConstantInfo
-	// Invalid0s in OtherBaseInfos
-	Unions			[]UnionInfo
-	Values			[]ValueInfo
-	Signals			[]SignalInfo
-	VFuncs			[]VFuncInfo
-	Properties			[]PropertyInfo
-	Fields			[]FieldInfo
-	Args				[]ArgInfo
-	Types			[]TypeInfo
-	// Unresolveds in OtherBaseInfos
-
-	TopLevelInvalids		[]int
-	TopLevelFunctions		[]int
-	TopLevelCallbacks		[]int
-	TopLevelStructs		[]int
+	TopLevelInvalids		[]BaseInfo
+	TopLevelFunctions		[]*FunctionInfo
+	TopLevelCallbacks		[]*CallableInfo
+	TopLevelStructs		[]*StructInfo
 	TopLevelBoxeds		[]int
-	TopLevelEnums		[]int
+	TopLevelEnums		[]*EnumInfo
 	TopLevelFlags			[]int
-	TopLevelObjects		[]int
-	TopLevelInterfaces		[]int
-	TopLevelConstants		[]int
-	TopLevelInvalid0s		[]int
-	TopLevelUnions		[]int
-	TopLevelValues		[]int
-	TopLevelSignals		[]int
-	TopLevelVFuncs		[]int
-	TopLevelProperties		[]int
-	TopLevelFields			[]int
-	TopLevelArgs			[]int
-	TopLevelTypes			[]int
-	TopLevelUnresolveds	[]int
-
+	TopLevelObjects		[]*ObjectInfo
+	TopLevelInterfaces		[]*InterfaceInfo
+	TopLevelConstants		[]*ConstantInfo
+	TopLevelInvalid0s		[]BaseInfo
+	TopLevelUnions		[]*UnionInfo
+	TopLevelValues		[]*ValueInfo
+	TopLevelSignals		[]*SignalInfo
+	TopLevelVFuncs		[]*VFuncInfo
+	TopLevelProperties		[]*PropertyInfo
+	TopLevelFields			[]*FieldInfo
+	TopLevelArgs			[]*ArgInfo
+	TopLevelTypes			[]*TypeInfo
+	TopLevelUnresolveds	[]BaseInfo
 }
 
 func ReadNamespace(nsname string, version string) (ns Namespace, err error) {
