@@ -10,7 +10,7 @@ import (
 func generate(ns Namespace) {
 	b := new(bytes.Buffer)
 
-	fmt.Fprintf(b, "package %s\n\n// ADD IMPORTS AND CGO DIRECTIVES HERE\n\n", nsGoName(ns.Name))
+	fmt.Fprintf(b, "package %s\n\nimport \"unsafe\"\n\n// ADD IMPORTS AND CGO DIRECTIVES HERE\n\n", nsGoName(ns.Name))
 
 	// enumerations
 	// to avoid unnecessary typing, let's collect all value names
@@ -71,6 +71,28 @@ func generate(ns Namespace) {
 		}
 		fmt.Fprintf(b, "}\n")
 		fmt.Fprintf(b, "\n")
+	}
+
+	// objects
+	// all objects are either derived (embed the base class) or not (have a native member)
+	for _, n := range ns.TopLevelObjects {
+		o := ns.Objects[n]
+		if o.Namespace != ns.Name {		// skip foreign imports
+			continue
+		}
+		goName := ns.GoName(o)
+		fmt.Fprintf(b, "type %s struct {\n", goName)
+		if o.Parent == -1 {		// base
+			fmt.Fprintf(b, "\tnative unsafe.Pointer\n")
+			fmt.Fprintf(b, "}\n")
+			fmt.Fprintf(b, "func (c *%s) Native() uintptr {\n", goName)
+			fmt.Fprintf(b, "\treturn uintptr(c.native)\n");
+		} else {
+			oo := ns.Objects[o.Parent]
+			fmt.Fprintf(b, "\t%s\n", ns.GoName(oo))
+		}
+		fmt.Fprintf(b, "}\n");
+		// TODO methods
 	}
 
 	os.Stdout.Write(b.Bytes())
