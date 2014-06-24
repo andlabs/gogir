@@ -70,6 +70,7 @@ func generate(ns Namespace) {
 			fmt.Fprintf(b, "\tfunc %s\n", ns.GoFuncSig(v.CallableInfo))
 		}
 		fmt.Fprintf(b, "}\n")
+		// TODO constants
 		fmt.Fprintf(b, "\n")
 	}
 
@@ -91,8 +92,10 @@ func generate(ns Namespace) {
 			oo := ns.Objects[o.Parent]
 			fmt.Fprintf(b, "\t%s\n", ns.GoName(oo))
 		}
-		fmt.Fprintf(b, "}\n");
+		fmt.Fprintf(b, "}\n")
 		// TODO methods
+		// TODO constants
+		fmt.Fprintf(b, "\n")
 	}
 
 	os.Stdout.Write(b.Bytes())
