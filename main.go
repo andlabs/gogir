@@ -89,11 +89,11 @@ func main() {
 
 func (ns Namespace) ArgToGo(n int) string {
 	arg := ns.Args[n]
-	return ns.ArgValueToGo(arg, ns.Types[arg.Type])
+	return ns.ArgValueToGo(arg, ns.Types[arg.Type], true)
 }
 
-func (ns Namespace) ArgValueToGo(arg ArgInfo, argtype TypeInfo) string {
-	return fmt.Sprintf("%s %s", arg.Name, ns.TypeValueToGo(argtype))
+func (ns Namespace) ArgValueToGo(arg ArgInfo, argtype TypeInfo, isArg bool) string {
+	return fmt.Sprintf("%s %s", arg.Name, ns.TypeValueToGo(argtype, isArg))
 }
 
 func (ns Namespace) GoFuncSig(ci CallableInfo) string {
@@ -188,10 +188,10 @@ func (ns Namespace) UnionToGo(n int) string {
 }
 
 func (ns Namespace) TypeToGo(n int) string {
-	return ns.TypeValueToGo(ns.Types[n])
+	return ns.TypeValueToGo(ns.Types[n], false)
 }
 
-func (ns Namespace) TypeValueToGo(t TypeInfo) string {
+func (ns Namespace) TypeValueToGo(t TypeInfo, isArg bool) string {
 	s := ""
 	if t.IsPointer {
 		switch t.Tag {
@@ -200,6 +200,9 @@ func (ns Namespace) TypeValueToGo(t TypeInfo) string {
 		case TagInterface:
 			// see GContainerStorePointer below
 			if t.Interface.Type == TypeInterface {
+				break
+			}
+			if isArg {		// arguments become the equivalent interfaces; see below
 				break
 			}
 			fallthrough
@@ -258,6 +261,9 @@ func (ns Namespace) TypeValueToGo(t TypeInfo) string {
 	case TagInterface:
 		if t.Interface.Namespace != ns.Name {
 			s += strings.ToLower(t.Interface.Namespace) + "."
+		}
+		if isArg {		// arguments become the equivalent interfaces
+			s += "I"
 		}
 		s += t.Interface.Name
 	case TagGList:

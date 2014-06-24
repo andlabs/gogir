@@ -145,7 +145,7 @@ func (ns Namespace) argPrefix(arg ArgInfo, t TypeInfo) string {
 		// TODO
 	case TagInterface:
 		ctype := ns.CName(t.Interface)
-		return fmt.Sprintf("\treal_%s = (*C.%s)(%s.native)\n", arg.Name, ctype, arg.Name)
+		return fmt.Sprintf("\treal_%s = (*C.%s)(unsafe.Pointer(%s.Native()))\n", arg.Name, ctype, arg.Name)
 	case TagGList:
 		// TODO
 	case TagGSList:
@@ -199,7 +199,7 @@ func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, i
 		s += "("
 		prefix += ns.argPrefix(receiver, itype)
 		suffix = ns.argSuffix(receiver, itype) + suffix
-		s += ns.ArgValueToGo(receiver, rtype)
+		s += ns.ArgValueToGo(receiver, rtype, false)
 		s += ") "
 	}
 	// disambiguate between constructors
