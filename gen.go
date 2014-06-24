@@ -10,7 +10,7 @@ import (
 func generate(ns Namespace) {
 	b := new(bytes.Buffer)
 
-	fmt.Fprintf(b, "package %s\n\nimport \"unsafe\"\n\n// ADD IMPORTS AND CGO DIRECTIVES HERE\n\n", nsGoName(ns.Name))
+	fmt.Fprintf(b, "package %s\n\nimport \"unsafe\"\nimport \"errors\"\n\n// ADD IMPORTS AND CGO DIRECTIVES HERE\n// BE SURE TO INCLUDE stdio.h\n\n", nsGoName(ns.Name))
 
 	// enumerations
 	// to avoid unnecessary typing, let's collect all value names
@@ -101,3 +101,62 @@ func generate(ns Namespace) {
 	os.Stdout.Write(b.Bytes())
 }
 
+// the rest of this file generates a wrapper function, taking care of converting special GLib constructs
+
+var basicNames map[TypeTag]string{
+	TagBoolean:		"C.gboolean",
+	TagInt8:			"C.gint8",
+	TagUint8:			"C.guint8",
+	TagInt16:			"C.gint16",
+	TagUint16:		"C.guint16",
+	TagInt32:			"C.gint32",
+	TagUint32:		"C.guint32",
+	TagInt64:			"C.gint64",
+	TagUint64:		"C.guint64",
+	TagFloat:			"C.gfloat",
+	TagDouble:		"C.gdouble",
+	TagGType:		"C.GType",
+	TagUnichar:		"C.gunichar",
+}
+
+func (ns Namespace) argPrefix(arg ArgInfo) string {
+	t := ns.Types[arg.Type]
+	// no prefix needed
+	if n, ok := basicNames[t.Tag]; ok {
+		return fmt.Sprintf("\treal_%s := %s(%s)\n", arg.Name, n, arg.Name)
+	}
+	switch t.Tag {
+	case TagUTF8String, TagFilename:
+		s := fmt.Sprintf("\treal_%s := (*C.gchar)(unsafe.Pointer(C.CString(%s)))\n", arg.Name, arg.Name)
+		s += fmt.Sprintf("\tdefer C.free(real_%s)\n", arg.Name)
+		return s
+	case TagArray:
+		// TODO
+	case TagInterface:
+		ctype := ns.CName(t.Interface)
+		return fmt.Sprintf("\treal_%s = (*C.%s)(%s.native)\n", arg.Name, ctype, arg.Name)
+	case TagGList:
+		// TODO
+	case TagGSList:
+		// TODO
+	case TagGHashTable:
+		// TODO
+	case TagGError:
+		return fmt.Sprintf("\tvar real_%s *C.GError = nil\n", arg.Name)
+	default:
+		panic(fmt.Errorf("unknown tag type %s in argPrefix()", t.Tag))
+	}
+	return "\t//TODO\n"
+}
+
+func (ns Namespace) argSuffix(arg ArgInfo) string {
+	t := ns.Types[arg.Type]
+	if t.Tag == GError {
+		s := fmt.Sprintf("\tif real_%s != nil {\n", arg.Name)
+		s += fmt.Sprintf("\t\tcmsg_%s := (*C.char)(unsafe.Pointer(real_%s.message))\n", arg.Name)
+		s += fmt.Sprintf("\t\t%s = errors.New(C.GoString(cmsg_%s)\n", arg.Name, arg.Name)
+		s += fmt.SPrintf("\t}\n")
+		return s
+	}
+	return ""			// no extra cleanup needed
+}
