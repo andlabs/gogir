@@ -17,40 +17,13 @@ var namespace string
 
 type Arg struct {
 	Name		string
-	Type			ArgType
+	Type			*TypeInfo
 	Polymorphic	bool
-	RealType		ArgType
+	RealType		*TypeInfo
 	Receiver		bool
 	Arg			Direction
 	Transfer		Transfer
 	Return		bool
-}
-
-// ArgType is similar to TypeInfo but has pointers resolved
-// TODO we can replace ArgType with TypeInfo now
-type ArgType struct {
-	Namespace	string
-	IsPointer		bool
-	Tag			TypeTag
-	ParamTypes	[]ArgType
-	Interface		BaseInfo
-	ArrayType	ArrayType
-}
-
-func (t *TypeInfo) argType() ArgType {
-	tt := ArgType{
-		Namespace:	t.Namespace,
-		IsPointer:		t.IsPointer,
-		Tag:			t.Tag,
-//		ParamTypes:	t.ParamTypes,
-ParamTypes:	make([]ArgType, len(t.ParamTypes)),
-		Interface:		t.Interface,
-		ArrayType:	t.ArrayType,
-	}
-for i:=0;i<len(tt.ParamTypes);i++{
-tt.ParamTypes[i]=t.ParamTypes[i].argType()
-}
-	return tt
 }
 
 // receivers are (this Type) for enums and (this *Type) for everything else
@@ -58,8 +31,10 @@ tt.ParamTypes[i]=t.ParamTypes[i].argType()
 func receiverArg(to BaseInfo, polymorphic bool, real BaseInfo) Arg {
 	a := Arg{
 		Name:		"this",
-		Type:		ArgType{
-			Namespace:	namespace,
+		Type:		&TypeInfo{
+			BaseInfo:		BaseInfo{
+				Namespace:	namespace,
+			},
 			IsPointer:		to.Type != TypeEnum,
 			Tag:			TagInterface,
 			Interface:		to,
@@ -68,7 +43,8 @@ func receiverArg(to BaseInfo, polymorphic bool, real BaseInfo) Arg {
 		Receiver:		true,
 	}
 	if a.Polymorphic {
-		a.RealType = a.Type
+		a.RealType = new(TypeInfo)
+		*a.RealType = *a.Type
 		a.RealType.Interface = real
 	}
 	return a
@@ -77,7 +53,7 @@ func receiverArg(to BaseInfo, polymorphic bool, real BaseInfo) Arg {
 func argumentArg(arg *ArgInfo) Arg {
 	return Arg{
 		Name:	arg.Name,
-		Type:	arg.Type.argType(),
+		Type:	arg.Type,
 		Arg:		arg.Direction,
 		Transfer:	arg.OwnershipTransfer,
 	}
@@ -86,7 +62,7 @@ func argumentArg(arg *ArgInfo) Arg {
 func returnArg(t *TypeInfo) Arg {
 	return Arg{
 		Name:	"ret",
-		Type:	t.argType(),
+		Type:	t,
 		Return:	true,
 	}
 }
@@ -123,7 +99,7 @@ var basicGoNames = map[TypeTag]string{
 	TagUnichar:		"rune",
 }
 
-func (t ArgType) CType() string {
+func (t *TypeInfo) CType() string {
 	if t.Tag == TagVoid && !t.IsPointer {
 		return ""
 	}
@@ -146,7 +122,7 @@ func (t ArgType) CType() string {
 		case GByteArray:
 			return "*C.GByteArray"
 		default:
-			panic(fmt.Errorf("unknown array type %d in ArgType.CType()", t.ArrayType))
+			panic(fmt.Errorf("unknown array type %d in TypeInfo.CType()", t.ArrayType))
 		}
 	case TagInterface:
 		s := "C." + t.Interface.Namespace + t.Interface.Name
@@ -163,10 +139,10 @@ func (t ArgType) CType() string {
 	case TagGError:
 		return "*C.GError"
 	}
-	panic(fmt.Errorf("unknown tag type %d in ArgType.CType()", t.Tag))
+	panic(fmt.Errorf("unknown tag type %d in TypeInfo.CType()", t.Tag))
 }
 
-func (t ArgType) GoType(arg bool, ret bool) string {
+func (t *TypeInfo) GoType(arg bool, ret bool) string {
 	prefix := ""
 	if !ret && t.IsPointer {
 		prefix = "*"
@@ -215,7 +191,7 @@ func (t ArgType) GoType(arg bool, ret bool) string {
 		// ignore pointer
 		return "error"
 	}
-	panic(fmt.Errorf("unknown tag type %d in ArgType.CType()", t.Tag))
+	panic(fmt.Errorf("unknown tag type %d in TypeInfo.CType()", t.Tag))
 }
 
 func (a Arg) listIn(ss string) string {
