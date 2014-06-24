@@ -98,9 +98,9 @@ func (ns Namespace) ArgValueToGo(arg ArgInfo, argtype TypeInfo, isArg bool) stri
 
 func (ns Namespace) GoFuncSig(ci CallableInfo) string {
 	s := ns.GoName(ci) + "("
-//	for _, i := range ci.Args {
-//		s += ns.ArgToGo(i) + ", "
-//	}
+	for _, i := range ci.Args {
+		s += ns.ArgToGo(i) + ", "
+	}
 	s += ")"
 	ret := ns.TypeToGo(ci.ReturnType)
 	if ret != "" {
