@@ -172,7 +172,19 @@ func (ns Namespace) argPrefix(arg ArgInfo, t TypeInfo) string {
 		}
 		return fmt.Sprintf("\treal_%s = (*C.%s)(unsafe.Pointer(%s.Native()))\n", arg.Name, ctype, arg.Name)
 	case TagGList:
-		// TODO
+		s := fmt.Sprintf("\tvar real_%s *C.GList = nil\n", arg.Name)
+		s += fmt.Sprintf("\tfor _, real_%s_val := range %s {\n", arg.Name, arg.Name)
+		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
+			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(real_%s_arg))\n", arg.Name, arg.Name, arg.Name)
+		} else {
+			// TODO floats fail this
+			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(uintptr(real_%s_arg)))\n", arg.Name, arg.Name, arg.Name)
+		}
+		s += "\t}\n"
+		s += fmt.Sprintf("\treal_%s = C.g_list_reverse(real_%s)\n", arg.Name, arg.Name)
+		// TODO bad for dynamic stuff
+		s += fmt.Sprintf("\tdefer C.g_list_free(real_%s)\n", arg.Name)
+		return s
 	case TagGSList:
 		// TODO
 	case TagGHashTable:
