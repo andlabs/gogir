@@ -76,12 +76,15 @@ func generate(ns Namespace) {
 
 	// objects
 	// all objects are either derived (embed the base class) or not (have a native member)
+	// each object also gets the methods of the interfaces it implements
+	// each object ALSO gets its own interface, to play into the whole polymorphism thing
 	for _, n := range ns.TopLevelObjects {
 		o := ns.Objects[n]
 		if o.Namespace != ns.Name {		// skip foreign imports
 			continue
 		}
 		goName := ns.GoName(o)
+		goIName := ns.GoIName(o)
 		fmt.Fprintf(b, "type %s struct {\n", goName)
 		if o.Parent == -1 {		// base
 			fmt.Fprintf(b, "\tnative unsafe.Pointer\n")
@@ -105,6 +108,22 @@ func generate(ns Namespace) {
 			}
 		}
 		// TODO other methods
+		fmt.Fprintf(b, "type %s interface {\n", goIName)
+		if o.Parent != -1 {
+			oo := ns.Objects[o.Parent]
+			fmt.Fprintf(b, "\t%s\n", ns.GoIName(oo))
+		}
+		for _, ii := range o.Interfaces {
+			iii := ns.Interfaces[ii]
+			fmt.Fprintf(b, "\t%s\n", ns.GoName(iii))
+		}
+		for _, m := range o.Methods {
+			f := ns.Functions[m]
+			if f.IsMethod {			// only actual methods
+				fmt.Fprintf(b, "\tfunc %s\n", ns.GoFuncSig(f.CallableInfo))
+			}
+		}
+		fmt.Fprintf(b, "}\n")
 		// TODO constants
 		fmt.Fprintf(b, "\n")
 	}
