@@ -73,14 +73,6 @@ func main() {
 			fmt.Println(ns.FieldToGo(i))
 		}
 	// TODO properties
-	case "allenums":
-		for i, _ := range ns.Enums {
-			fmt.Println(ns.EnumToGo(i))
-		}
-	case "allinterfaces":
-		for i, _ := range ns.Interfaces {
-			fmt.Println(ns.InterfaceToGo(i))
-		}
 	case "allobjects":
 		for i, _ := range ns.Objects {
 			fmt.Println(ns.ObjectToGo(i))
@@ -177,54 +169,6 @@ func (ns Namespace) FieldToGo(n int) string {
 		return "\t// " + f.Name + " external; skip"
 	}
 	s := "\t" + ns.GoName(f) + " " + ns.TypeToGo(f.Type)
-	return s
-}
-
-func (ns Namespace) EnumToGo(n int) string {
-	e := ns.Enums[n]
-	if e.Namespace != ns.Name {
-		return "// " + e.Name + " external; skip"
-	}
-	// TODO use e.Name or e.RTName?
-	s := "type " + ns.GoName(e) + " " + e.StorageType.BasicString() + "\n"
-	s += "const (\n"
-	for _, i := range e.Values {
-		v := ns.Values[i]
-		s += "\t" + ns.GoName(v) + " " + ns.GoName(e) + " = "
-		s += "C." + ns.CName(v) + "\n"		
-	}
-	s += ")"
-	return s
-}
-
-func (ns Namespace) InterfaceToGo(n int) string {
-	i := ns.Interfaces[n]
-	if i.Namespace != ns.Name {
-		return "// " + i.Name + " external; skip"
-	}
-	s := "type " + ns.GoName(i) + " interface {\n"
-	for _, p := range i.Prerequisites {
-		s += "\t" + strings.ToLower(p.Namespace) + "." + p.Name + "\n"
-	}
-	// TODO properties
-	s += "\t// methods\n"
-	for _, n := range i.Methods {
-		s += "\t" + ns.FunctionToGo(n) + "\n"
-	}
-	s += "\t// signals\n"
-	for _, n := range i.Signals {
-		s += "\t" + ns.SignalToGo(n) + "\n"
-	}
-	s += "\t// vfuncs\n"
-	for _, n := range i.VFuncs {
-		s += "\t" + ns.VFuncToGo(n) + "\n"
-	}
-	// TODO Struct
-	s += "}"		// TODO newline
-	for _, n := range i.Constants {
-		s += ns.ConstantToGo(n) + "\n"
-	}
-	// TODO Struct
 	return s
 }
 
