@@ -300,7 +300,7 @@ func (a Arg) Prefix() string {
 	case TagGHashTable:
 		return "// TODO"
 	case TagGError:
-		// TODO
+		return "// TODO"
 //		return fmt.Sprintf("\tvar real_%s *C.GError = nil\n", arg.Name)
 	}
 	panic(fmt.Errorf("unknown tag type %d in Arg.Prefix()", t.Tag))
