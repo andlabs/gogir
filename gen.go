@@ -95,7 +95,14 @@ func generate(ns Namespace) {
 		fmt.Fprintf(b, "}\n")
 		for _, m := range o.Methods {
 			mm := ns.Functions[m]
-			fmt.Fprintf(b, "%s\n", ns.wrap(mm, o))
+			fmt.Fprintf(b, "%s\n", ns.wrap(mm, o, false, InterfaceInfo{}))
+		}
+		for _, ii := range o.Interfaces {
+			iii := ns.Interfaces[ii]
+			for _, m := range iii.Methods {
+				mm := ns.Functions[m]
+				fmt.Fprintf(b, "%s\n", ns.wrap(mm, o, true, iii))
+			}
 		}
 		// TODO other methods
 		// TODO constants
@@ -164,7 +171,7 @@ func (ns Namespace) argSuffix(arg ArgInfo, t TypeInfo) string {
 	return ""			// no extra cleanup needed
 }
 
-func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo) string {
+func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, iface InterfaceInfo) string {
 	s := "func "
 	prefix := ""
 	suffix := ""
@@ -185,9 +192,13 @@ func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo) string {
 			Tag:			TagInterface,
 			Interface:		to.BaseInfo,
 		}
+		itype := rtype
+		if isInterface {
+			itype.Interface = iface.BaseInfo
+		}
 		s += "("
-		prefix += ns.argPrefix(receiver, rtype)
-		suffix = ns.argSuffix(receiver, rtype) + suffix
+		prefix += ns.argPrefix(receiver, itype)
+		suffix = ns.argSuffix(receiver, itype) + suffix
 		s += ns.ArgValueToGo(receiver, rtype)
 		s += ") "
 	}
