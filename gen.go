@@ -124,8 +124,7 @@ var basicNames = map[TypeTag]string{
 	TagUnichar:		"C.gunichar",
 }
 
-func (ns Namespace) argPrefix(arg ArgInfo) string {
-	t := ns.Types[arg.Type]
+func (ns Namespace) argPrefix(arg ArgInfo, t TypeInfo) string {
 	// no prefix needed
 	if n, ok := basicNames[t.Tag]; ok {
 		return fmt.Sprintf("\treal_%s := %s(%s)\n", arg.Name, n, arg.Name)
@@ -154,8 +153,7 @@ func (ns Namespace) argPrefix(arg ArgInfo) string {
 	return "\t//TODO\n"
 }
 
-func (ns Namespace) argSuffix(arg ArgInfo) string {
-	t := ns.Types[arg.Type]
+func (ns Namespace) argSuffix(arg ArgInfo, t TypeInfo) string {
 	if t.Tag == TagGError {
 		s := fmt.Sprintf("\tif real_%s != nil {\n", arg.Name)
 		s += fmt.Sprintf("\t\tcmsg_%s := (*C.char)(unsafe.Pointer(real_%s.message))\n", arg.Name)
@@ -170,28 +168,34 @@ func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo) string {
 	s := "func "
 	prefix := ""
 	suffix := ""
-	argStart := 0
-	// method.IsMethod behaves in absoutely incomprehensible ways
-	// so let's make sure the first argument is damn well a receiver
+	// method receivers aren't listed in the arguments; we have to fake it
 	if method.IsMethod {
-		if len(method.Args) > 0 {
-			receiver := ns.Args[method.Args[0]]
-			rtype := ns.Types[receiver.Type]
-			if rtype.Tag == TagInterface && rtype.Interface.Namespace == ns.Name && rtype.Name == to.Name {
-				s += "("
-				prefix += ns.argPrefix(receiver)
-				suffix = ns.argSuffix(receiver) + suffix
-				s += ns.ArgToGo(method.Args[0])
-				s += ") "
-				argStart = 1
-			}
+		// make a fake receiver
+		receiver := ArgInfo{
+			BaseInfo:		BaseInfo{
+				Namespace:	ns.Name,
+				Name:		"this",		// let's hope nothing uses this name
+			},
 		}
+		rtype := TypeInfo{
+			BaseInfo:		BaseInfo{
+				Namespace:	ns.Name,
+			},
+			IsPointer:		true,
+			Tag:			TagInterface,
+			Interface:		to.BaseInfo,
+		}
+		s += "("
+		prefix += ns.argPrefix(receiver, rtype)
+		suffix = ns.argSuffix(receiver, rtype) + suffix
+		s += ns.ArgValueToGo(receiver, rtype)
+		s += ") "
 	}
 	s += ns.GoName(method) + "("
-	for i := argStart; i < len(method.Args); i++ {
+	for i := 0; i < len(method.Args); i++ {
 		arg := ns.Args[method.Args[i]]
-		prefix += ns.argPrefix(arg)
-		suffix = ns.argSuffix(arg) + suffix
+		prefix += ns.argPrefix(arg, ns.Types[arg.Type])
+		suffix = ns.argSuffix(arg, ns.Types[arg.Type]) + suffix
 		s += ns.ArgToGo(method.Args[i])
 		s += ", "
 	}
@@ -207,6 +211,9 @@ func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo) string {
 		s += "ret = (" + ret + ")("
 	}
 	s += "C." + ns.CName(method) + "("
+	if method.IsMethod {
+		s += "real_this, "
+	}
 	for i := 0; i < len(method.Args); i++ {
 		arg := ns.Args[method.Args[i]]
 		s += "real_" + arg.Name + ", "

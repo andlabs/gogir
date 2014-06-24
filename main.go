@@ -44,10 +44,6 @@ func main() {
 			objs = append(objs[:i], objs[i + 1:]...)
 		}
 		jsonout(&indenter{os.Stdout}, objs)
-	case "allargs":
-		for i, _ := range ns.Args {
-			fmt.Println(ns.ArgToGo(i))
-		}
 	case "allcallbacks":
 		for i, _ := range ns.Callbacks {
 			fmt.Println(ns.CallbackToGo(i))
@@ -109,7 +105,11 @@ func main() {
 
 func (ns Namespace) ArgToGo(n int) string {
 	arg := ns.Args[n]
-	return fmt.Sprintf("%s %s", arg.Name, ns.TypeToGo(arg.Type))
+	return ns.ArgValueToGo(arg, ns.Types[arg.Type])
+}
+
+func (ns Namespace) ArgValueToGo(arg ArgInfo, argtype TypeInfo) string {
+	return fmt.Sprintf("%s %s", arg.Name, ns.TypeValueToGo(argtype))
 }
 
 func (ns Namespace) CallbackToGo(n int) string {
@@ -141,9 +141,9 @@ func (cb CallableInfo) CallableToGo(ns Namespace) string {
 
 func (ns Namespace) GoFuncSig(ci CallableInfo) string {
 	s := ns.GoName(ci) + "("
-	for _, i := range ci.Args {
-		s += ns.ArgToGo(i) + ", "
-	}
+//	for _, i := range ci.Args {
+//		s += ns.ArgToGo(i) + ", "
+//	}
 	s += ")"
 	ret := ns.TypeToGo(ci.ReturnType)
 	if ret != "" {
@@ -251,7 +251,10 @@ func (ns Namespace) UnionToGo(n int) string {
 }
 
 func (ns Namespace) TypeToGo(n int) string {
-	t := ns.Types[n]
+	return ns.TypeValueToGo(ns.Types[n])
+}
+
+func (ns Namespace) TypeValueToGo(t TypeInfo) string {
 	s := ""
 	if t.IsPointer {
 		switch t.Tag {
