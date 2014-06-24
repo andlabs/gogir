@@ -131,145 +131,20 @@ func generate(ns Namespace) {
 	os.Stdout.Write(b.Bytes())
 }
 
-// the rest of this file generates a wrapper function, taking care of converting special GLib constructs
-
-var basicNames = map[TypeTag]string{
-	TagVoid:			"unsafe.Pointer",
-	TagInt8:			"C.gint8",
-	TagUint8:			"C.guint8",
-	TagInt16:			"C.gint16",
-	TagUint16:		"C.guint16",
-	TagInt32:			"C.gint32",
-	TagUint32:		"C.guint32",
-	TagInt64:			"C.gint64",
-	TagUint64:		"C.guint64",
-	TagFloat:			"C.gfloat",
-	TagDouble:		"C.gdouble",
-	TagGType:		"C.GType",
-	TagUnichar:		"C.gunichar",
-}
-
-func (ns Namespace) argPrefix(arg ArgInfo, t TypeInfo) string {
-	// no prefix needed
-	if n, ok := basicNames[t.Tag]; ok {
-		return fmt.Sprintf("\treal_%s := %s(%s)\n", arg.Name, n, arg.Name)
-	}
-	switch t.Tag {
-	case TagBoolean:
-		s := fmt.Sprintf("\treal_%s := C.gboolean(C.TRUE)\n", arg.Name)
-		s += fmt.Sprintf("\tif !(%s) { real_%s = C.gboolean(C.FALSE)\n", arg.Name, arg.Name)
-		return s
-	case TagUTF8String, TagFilename:
-		s := fmt.Sprintf("\treal_%s := (*C.gchar)(unsafe.Pointer(C.CString(%s)))\n", arg.Name, arg.Name)
-		s += fmt.Sprintf("\tdefer C.free(unsafe.Pointer(real_%s))\n", arg.Name)
-		return s
-	case TagArray:
-		// TODO
-	case TagInterface:
-		ctype := ns.CName(t.Interface)
-		if t.Interface.Type == TypeEnum {
-			return fmt.Sprintf("\treal_%s = (C.%s)(%s)\n", arg.Name, ctype, arg.Name)
-		}
-		return fmt.Sprintf("\treal_%s = (*C.%s)(unsafe.Pointer(%s.Native()))\n", arg.Name, ctype, arg.Name)
-	case TagGList:
-		s := fmt.Sprintf("\tvar real_%s *C.GList = nil\n", arg.Name)
-		s += fmt.Sprintf("\tfor _, real_%s_val := range %s {\n", arg.Name, arg.Name)
-		if ns.Types[t.ParamTypes[0]].GContainerStorePointer() {
-			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(real_%s_arg))\n", arg.Name, arg.Name, arg.Name)
-		} else if ns.Types[t.ParamTypes[0]].Tag == TagFloat {
-			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(uintptr(math.Float32bits(real_%s_arg))))\n", arg.Name, arg.Name, arg.Name)
-		} else if ns.Types[t.ParamTypes[0]].Tag == TagDouble {
-			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(uintptr(math.Float64bits(real_%s_arg))))\n", arg.Name, arg.Name, arg.Name)
-		} else {
-			s += fmt.Sprintf("\t\treal_%s = C.g_list_prepend(real_%s, C.gpointer(unsafe.Pointer(uintptr(real_%s_arg)))\n", arg.Name, arg.Name, arg.Name)
-		}
-		s += "\t}\n"
-		s += fmt.Sprintf("\treal_%s = C.g_list_reverse(real_%s)\n", arg.Name, arg.Name)
-		s += fmt.Sprintf("\tdefer C.g_list_free(real_%s)\n", arg.Name)
-		return s
-	case TagGSList:
-		// TODO
-	case TagGHashTable:
-		// TODO
-	case TagGError:
-		return fmt.Sprintf("\tvar real_%s *C.GError = nil\n", arg.Name)
-	default:
-		panic(fmt.Errorf("unknown tag type %d in argPrefix()", t.Tag))
-	}
-	return "\t//TODO\n"
-}
-
-func (ns Namespace) argSuffix(arg ArgInfo, t TypeInfo) string {
-	if t.Tag == TagGError {
-		s := fmt.Sprintf("\tif real_%s != nil {\n", arg.Name)
-		s += fmt.Sprintf("\t\tcmsg_%s := (*C.char)(unsafe.Pointer(real_%s.message))\n", arg.Name)
-		s += fmt.Sprintf("\t\t%s = errors.New(C.GoString(cmsg_%s)\n", arg.Name, arg.Name)
-		s += fmt.Sprintf("\t}\n")
-		return s
-	}
-	return ""			// no extra cleanup needed
-}
-
-func (ns Namespace) retconv(expr string, t TypeInfo) string {
-	switch t.Tag {
-	case TagVoid:
-		if t.IsPointer {
-			// TODO
-		}
-		return expr		// no return
-	case TagBoolean:
-		return "(" + expr + ") != C.FALSE"
-	case TagUTF8String,TagFilename:
-		return "C.GoString((*C.char)(unsafe.Pointer(" + expr + ")))"
-	case TagArray:
-		// TODO
-	case TagInterface:
-		if t.IsPointer {		// objects
-			return fmt.Sprintf("&%s{}; ret.native = unsafe.Pointer(%s)", ns.GoName(t.Interface), expr)
-		}
-		// fall through to the bottom, which does what we want
-	case TagGList:
-		// TODO
-	case TagGSList:
-		// TODO
-	case TagGHashTable:
-		// TODO
-	case TagGError:
-		// TODO
-	}
-	// anything else? take a guess... (correct for basic types)
-	return fmt.Sprintf("(%s)(%s)", ns.TypeValueToGo(t, false), expr)
-}
-
 func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, iface InterfaceInfo) string {
+	namespace = ns.Name
 	s := "func "
 	prefix := ""
 	suffix := ""
+	arglist := ""
 	// method receivers aren't listed in the arguments; we have to fake it
 	if method.IsMethod {
-		// make a fake receiver
-		receiver := ArgInfo{
-			BaseInfo:		BaseInfo{
-				Namespace:	ns.Name,
-				Name:		"this",		// let's hope nothing uses this name
-			},
-		}
-		rtype := TypeInfo{
-			BaseInfo:		BaseInfo{
-				Namespace:	ns.Name,
-			},
-			IsPointer:		true,
-			Tag:			TagInterface,
-			Interface:		to.BaseInfo,
-		}
-		itype := rtype
-		if isInterface {
-			itype.Interface = iface.BaseInfo
-		}
+		receiver := receiverArg(to.BaseInfo, isInterface, iface.BaseInfo)
 		s += "("
-		prefix += ns.argPrefix(receiver, itype)
-		suffix = ns.argSuffix(receiver, itype) + suffix
-		s += ns.ArgValueToGo(receiver, rtype, false)
+		prefix += receiver.Prefix()
+		suffix = receiver.Suffix() + suffix
+		arglist += receiver.GoArg() + ", "
+		s += receiver.GoDecl()
 		s += ") "
 	}
 	// disambiguate between constructors
@@ -279,38 +154,26 @@ func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, i
 	}
 	s += ns.GoName(method) + "("
 	for i := 0; i < len(method.Args); i++ {
-		arg := ns.Args[method.Args[i]]
-		prefix += ns.argPrefix(arg, ns.Types[arg.Type])
-		suffix = ns.argSuffix(arg, ns.Types[arg.Type]) + suffix
-		s += ns.ArgToGo(method.Args[i])
+		arg := argumentArg(ns.Args[method.Args[i]], ns)
+		prefix += arg.Prefix()
+		suffix = arg.Suffix() + suffix
+		arglist += arg.GoArg() + ", "
+		s += arg.GoDecl()
 		s += ", "
 	}
 	s += ") "
-	ret := ns.TypeToGo(method.ReturnType)
-	if ret != "" {
-		s += "(ret " + ret + ") "
+	retarg := returnArg(ns.Types[method.ReturnType], ns)
+	prefix += retarg.Prefix()
+	suffix = retarg.Suffix() + suffix
+	s += retarg.GoDecl()
+	if len(retarg.GoDecl()) != 0 {
+		s += " "
 	}
 	s += "{\n"
 	s += prefix
-	s += "\t"
-	j := "C." + ns.CName(method) + "("
-	if method.IsMethod {
-		j += "real_this, "
-	}
-	for i := 0; i < len(method.Args); i++ {
-		arg := ns.Args[method.Args[i]]
-		j += "real_" + arg.Name + ", "
-	}
-	j += ")"
-	if ret != "" {
-		s += "ret = "
-	}
-	s += ns.retconv(j, ns.Types[method.ReturnType])
-	s += "\n"
+	s += "\t" + retarg.GoCall("C." + ns.CName(method) + "(" + arglist + ")") + "\n"
 	s += suffix
-	if ret != "" {
-		s += "\treturn ret\n"
-	}
+	s += retarg.GoRet()
 	s += "}"
 	return s
 }
