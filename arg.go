@@ -165,9 +165,9 @@ func (t ArgType) CType() string {
 	panic(fmt.Errorf("unknown tag type %d in ArgType.CType()", t.Tag))
 }
 
-func (t ArgType) GoType(arg bool) string {
+func (t ArgType) GoType(arg bool, ret bool) string {
 	prefix := ""
-	if t.IsPointer {
+	if !ret && t.IsPointer {
 		prefix = "*"
 	}
 	if t.Tag == TagVoid && !t.IsPointer {
@@ -191,7 +191,7 @@ func (t ArgType) GoType(arg bool) string {
 		return "string"
 	case TagArray, TagGList, TagGSList:
 		// ignore pointer
-		return "[]" + t.ParamTypes[0].GoType(arg)
+		return "[]" + t.ParamTypes[0].GoType(arg, ret)
 	case TagInterface:
 		s := t.Interface.Name
 		isInterface := t.Interface.Type == TypeInterface
@@ -209,7 +209,7 @@ func (t ArgType) GoType(arg bool) string {
 		return s
 	case TagGHashTable:
 		// ignore pointer
-		return "map[" + t.ParamTypes[0].GoType(arg) + "]" + t.ParamTypes[1].GoType(arg)
+		return "map[" + t.ParamTypes[0].GoType(arg, ret) + "]" + t.ParamTypes[1].GoType(arg, ret)
 	case TagGError:
 		// ignore pointer
 		return "error"
@@ -251,7 +251,7 @@ func (a Arg) listIn(ss string) string {
 func (a Arg) Prefix() string {
 	if a.Receiver {
 		// should always be an object type
-		format := "\tvar real_%s = (%%s)(%s.native)\n"
+		format := "\treal_%s := (%%s)(%s.native)\n"
 		format = fmt.Sprintf(format, a.Name, a.Name)
 		if a.Polymorphic {
 			return fmt.Sprintf(format, a.RealType.CType())
@@ -319,7 +319,7 @@ func (a Arg) Suffix() string {
 	}
 
 	if s, ok := basicGoNames[t.Tag]; ok {
-		return fmt.Sprintf("\t%s := (%s)(real_%s)\n", realname, s, a.Name)
+		return fmt.Sprintf("\t%s = (%s)(real_%s)\n", realname, s, a.Name)
 	}
 
 	switch t.Tag {
@@ -333,15 +333,15 @@ func (a Arg) Suffix() string {
 	case TagGType:
 		return "// TODO"
 	case TagUTF8String, TagFilename:
-		return fmt.Sprintf("\t%s := C.GoString((*C.char)(unsafe.Pointer(%s)))\n", realname, a.Name)
+		return fmt.Sprintf("\t%s = C.GoString((*C.char)(unsafe.Pointer(%s)))\n", realname, a.Name)
 	case TagArray:
 		return "// TODO"
 	case TagInterface:
-		s := t.GoType(false)
+		s := t.GoType(false, true)
 		if t.IsPointer {		// objects
 			return fmt.Sprintf("\t%s = &%s{}; %s.native = unsafe.Pointer(real_%s)\n", realname, s, realname, a.Name)
 		}
-		return fmt.Sprintf("\t%s := (%s)(real_%s)\n", realname, s, a.Name)
+		return fmt.Sprintf("\t%s = (%s)(real_%s)\n", realname, s, a.Name)
 	case TagGList:
 return"TODO"//		return a.listOut("")
 	case TagGSList:
@@ -364,9 +364,9 @@ func (a Arg) GoDecl() string {
 		if a.Type.Tag == TagVoid && !a.Type.IsPointer {
 			return ""
 		}
-		return "(" + a.Name + " " + a.Type.GoType(false) + ")"
+		return "(" + a.Name + " " + a.Type.GoType(false, false) + ")"
 	}
-	return a.Name + " " + a.Type.GoType(false)
+	return a.Name + " " + a.Type.GoType(false, false)
 }
 
 func (a Arg) GoArg() string {
