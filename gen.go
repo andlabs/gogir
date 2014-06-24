@@ -103,7 +103,7 @@ func generate(ns Namespace) {
 
 // the rest of this file generates a wrapper function, taking care of converting special GLib constructs
 
-var basicNames map[TypeTag]string{
+var basicNames = map[TypeTag]string{
 	TagBoolean:		"C.gboolean",
 	TagInt8:			"C.gint8",
 	TagUint8:			"C.guint8",
@@ -151,12 +151,63 @@ func (ns Namespace) argPrefix(arg ArgInfo) string {
 
 func (ns Namespace) argSuffix(arg ArgInfo) string {
 	t := ns.Types[arg.Type]
-	if t.Tag == GError {
+	if t.Tag == TagGError {
 		s := fmt.Sprintf("\tif real_%s != nil {\n", arg.Name)
 		s += fmt.Sprintf("\t\tcmsg_%s := (*C.char)(unsafe.Pointer(real_%s.message))\n", arg.Name)
 		s += fmt.Sprintf("\t\t%s = errors.New(C.GoString(cmsg_%s)\n", arg.Name, arg.Name)
-		s += fmt.SPrintf("\t}\n")
+		s += fmt.Sprintf("\t}\n")
 		return s
 	}
 	return ""			// no extra cleanup needed
+}
+
+func (ns Namespace) wrap(method FunctionInfo, object ObjectInfo, forInterface bool, iface InterfaceInfo) string {
+	s := "func "
+	prefix := ""
+	suffix := ""
+	argStart := 0
+	if method.IsMethod {
+		s += "("
+		receiver := ns.Args[method.Args[0]]
+		prefix += ns.argPrefix(receiver)
+		suffix += ns.argSuffix(receiver)
+		s += ns.ArgToGo(method.Args[0])
+		s += ") "
+		argStart = 1
+	}
+	s += method.Name + "("
+	for i := argStart; i < len(method.Args); i++ {
+		arg := ns.Args[method.Args[i]]
+		prefix += ns.argPrefix(arg)
+		suffix += ns.argSuffix(arg)
+		s += ns.ArgToGo(method.Args[i])
+		s += ", "
+	}
+	s += ") "
+	ret := ns.TypeToGo(method.ReturnType)
+	if ret != "" {
+		s += " (ret " + ret + ")"
+	}
+	s += "{\n"
+	s += prefix
+	s += "\t"
+	if ret != "" {
+		s += "ret = (" + ret + ")("
+	}
+	s += "C." + ns.CName(method) + "("
+	for i := 0; i < len(method.Args); i++ {
+		arg := ns.Args[method.Args[i]]
+		s += "real_" + arg.Name + ", "
+	}
+	s += ")"
+	if ret != "" {
+		s += ")"
+	}
+	s += "\n"
+	s += suffix
+	if ret != "" {
+		s += "\nreturn ret\n"
+	}
+	s += "}\n"
+	return s
 }
