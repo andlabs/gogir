@@ -44,22 +44,6 @@ func main() {
 			objs = append(objs[:i], objs[i + 1:]...)
 		}
 		jsonout(&indenter{os.Stdout}, objs)
-	case "allcallbacks":
-		for i, _ := range ns.Callbacks {
-			fmt.Println(ns.CallbackToGo(i))
-		}
-	case "allfunctions":
-		for i, _ := range ns.Functions {
-			fmt.Println(ns.FunctionToGo(i))
-		}
-	case "allsignals":
-		for i, _ := range ns.Signals {
-			fmt.Println(ns.SignalToGo(i))
-		}
-	case "allvfuncs":
-		for i, _ := range ns.VFuncs {
-			fmt.Println(ns.VFuncToGo(i))
-		}
 	case "allconsts":
 		for i, _ := range ns.Constants {
 			fmt.Println(ns.ConstantToGo(i))
@@ -110,33 +94,6 @@ func (ns Namespace) ArgToGo(n int) string {
 
 func (ns Namespace) ArgValueToGo(arg ArgInfo, argtype TypeInfo) string {
 	return fmt.Sprintf("%s %s", arg.Name, ns.TypeValueToGo(argtype))
-}
-
-func (ns Namespace) CallbackToGo(n int) string {
-	return ns.Callbacks[n].CallableToGo(ns)
-}
-
-func (ns Namespace) FunctionToGo(n int) string {
-	return ns.Functions[n].CallableToGo(ns)
-}
-
-func (ns Namespace) SignalToGo(n int) string {
-	return ns.Signals[n].CallableToGo(ns)
-}
-
-func (ns Namespace) VFuncToGo(n int) string {
-	return ns.VFuncs[n].CallableToGo(ns)
-}
-
-func (cb CallableInfo) CallableToGo(ns Namespace) string {
-	if cb.Namespace != ns.Name {
-		return "// " + cb.Name + " external; skip"
-	}
-	s := "func "
-	if cb.IsMethod {
-		s += "() "
-	}
-	return s + ns.GoFuncSig(cb)
 }
 
 func (ns Namespace) GoFuncSig(ci CallableInfo) string {
@@ -192,18 +149,6 @@ func (ns Namespace) ObjectToGo(n int) string {
 	}
 	s += "}\n"
 	s += "// methods\n"
-	for _, n := range o.Methods {
-		s += ns.FunctionToGo(n) + "\n"
-	}
-	// TODO properties
-	s += "// signals\n"
-	for _, n := range o.Signals {
-		s += ns.SignalToGo(n) + "\n"
-	}
-	s += "// vfuncs\n"
-	for _, n := range o.VFuncs {
-		s += ns.VFuncToGo(n) + "\n"
-	}
 	// TODO Struct
 	for _, n := range o.Constants {
 		s += ns.ConstantToGo(n) + "\n"
@@ -225,10 +170,6 @@ func (ns Namespace) StructToGo(n int) string {
 		s += ns.FieldToGo(n) + "\n"
 	}
 	s += "}\n"
-	s += "// methods\n"
-	for _, n := range st.Methods {
-		s += ns.FunctionToGo(n) + "\n"
-	}
 	return s
 }
 
@@ -243,10 +184,6 @@ func (ns Namespace) UnionToGo(n int) string {
 		s += ns.FieldToGo(n) + "\n"
 	}
 	s += "}\n"
-	s += "// methods\n"
-	for _, n := range u.Methods {
-		s += ns.FunctionToGo(n) + "\n"
-	}
 	return s
 }
 
