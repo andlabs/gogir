@@ -98,13 +98,13 @@ func generate(ns Namespace) {
 		fmt.Fprintf(b, "}\n")
 		for _, m := range o.Methods {
 			mm := ns.Functions[m]
-			fmt.Fprintf(b, "%s\n", ns.wrap(mm, o, false, InterfaceInfo{}))
+			fmt.Fprintf(b, "%s\n", ns.wrap(mm, o.BaseInfo, false, InterfaceInfo{}))
 		}
 		for _, ii := range o.Interfaces {
 			iii := ns.Interfaces[ii]
 			for _, m := range iii.Methods {
 				mm := ns.Functions[m]
-				fmt.Fprintf(b, "%s\n", ns.wrap(mm, o, true, iii))
+				fmt.Fprintf(b, "%s\n", ns.wrap(mm, o.BaseInfo, true, iii))
 			}
 		}
 		// TODO other methods
@@ -154,17 +154,17 @@ func generate(ns Namespace) {
 		}
 		fmt.Fprintf(b, "}\n")
 		// TODO conversion functions
-//		for _, m := range s.Methods {
-//			mm := ns.Functions[m]
-//			fmt.Fprintf(b, "%s\n", ns.wrap(mm, s, false, InterfaceInfo{}))
-//		}
-//		fmt.Fprintf(b, "\n")
+		for _, m := range s.Methods {
+			mm := ns.Functions[m]
+			fmt.Fprintf(b, "%s\n", ns.wrap(mm, s.BaseInfo, false, InterfaceInfo{}))
+		}
+		fmt.Fprintf(b, "\n")
 	}
 
 	os.Stdout.Write(b.Bytes())
 }
 
-func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, iface InterfaceInfo) string {
+func (ns Namespace) wrap(method FunctionInfo, to BaseInfo, isInterface bool, iface InterfaceInfo) string {
 	namespace = ns.Name
 	s := "func "
 	prefix := ""
@@ -172,7 +172,7 @@ func (ns Namespace) wrap(method FunctionInfo, to ObjectInfo, isInterface bool, i
 	arglist := ""
 	// method receivers aren't listed in the arguments; we have to fake it
 	if method.IsMethod {
-		receiver := receiverArg(to.BaseInfo, isInterface, iface.BaseInfo)
+		receiver := receiverArg(to, isInterface, iface.BaseInfo)
 		s += "("
 		prefix += receiver.Prefix()
 		suffix = receiver.Suffix() + suffix
