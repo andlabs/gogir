@@ -142,9 +142,9 @@ func (t *TypeInfo) CType() string {
 	panic(fmt.Errorf("unknown tag type %d in TypeInfo.CType()", t.Tag))
 }
 
-func (t *TypeInfo) GoType(arg bool, ret bool) string {
+func (t *TypeInfo) GoType(arg bool) string {
 	prefix := ""
-	if !ret && t.IsPointer {
+	if t.IsPointer {
 		prefix = "*"
 	}
 	if t.Tag == TagVoid && !t.IsPointer {
@@ -168,7 +168,7 @@ func (t *TypeInfo) GoType(arg bool, ret bool) string {
 		return "string"
 	case TagArray, TagGList, TagGSList:
 		// ignore pointer
-		return "[]" + t.ParamTypes[0].GoType(arg, ret)
+		return "[]" + t.ParamTypes[0].GoType(arg)
 	case TagInterface:
 		s := t.Interface.Name
 		isInterface := t.Interface.Type == TypeInterface
@@ -186,7 +186,7 @@ func (t *TypeInfo) GoType(arg bool, ret bool) string {
 		return s
 	case TagGHashTable:
 		// ignore pointer
-		return "map[" + t.ParamTypes[0].GoType(arg, ret) + "]" + t.ParamTypes[1].GoType(arg, ret)
+		return "map[" + t.ParamTypes[0].GoType(arg) + "]" + t.ParamTypes[1].GoType(arg)
 	case TagGError:
 		// ignore pointer
 		return "error"
@@ -314,8 +314,9 @@ func (a Arg) Suffix() string {
 	case TagArray:
 		return "// TODO"
 	case TagInterface:
-		s := t.GoType(false, true)
+		s := t.GoType(false)
 		if t.IsPointer {		// objects
+			s = s[1:]		// strip *
 			return fmt.Sprintf("\t%s = &%s{}; %s.native = unsafe.Pointer(real_%s)\n", realname, s, realname, a.Name)
 		}
 		return fmt.Sprintf("\t%s = (%s)(real_%s)\n", realname, s, a.Name)
@@ -341,9 +342,9 @@ func (a Arg) GoDecl() string {
 		if a.Type.Tag == TagVoid && !a.Type.IsPointer {
 			return ""
 		}
-		return "(" + a.Name + " " + a.Type.GoType(false, false) + ")"
+		return "(" + a.Name + " " + a.Type.GoType(false) + ")"
 	}
-	return a.Name + " " + a.Type.GoType(false, false)
+	return a.Name + " " + a.Type.GoType(false)
 }
 
 func (a Arg) GoArg() string {
