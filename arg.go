@@ -170,7 +170,8 @@ func (t *TypeInfo) GoType(arg bool) string {
 		return "string"
 	case TagArray, TagGList, TagGSList:
 		// ignore pointer
-		return "[]" + t.ParamTypes[0].GoType(arg)
+		// arg should not be carried below the first recursive call
+		return "[]" + t.ParamTypes[0].GoType(false)
 	case TagInterface:
 		s := t.Interface.Name
 		isInterface := t.Interface.Type == TypeInterface
@@ -188,7 +189,8 @@ func (t *TypeInfo) GoType(arg bool) string {
 		return s
 	case TagGHashTable:
 		// ignore pointer
-		return "map[" + t.ParamTypes[0].GoType(arg) + "]" + t.ParamTypes[1].GoType(arg)
+		// arg should not be carried below the first recursive call
+		return "map[" + t.ParamTypes[0].GoType(false) + "]" + t.ParamTypes[1].GoType(false)
 	case TagGError:
 		// ignore pointer
 		return "error"
