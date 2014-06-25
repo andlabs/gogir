@@ -114,6 +114,7 @@ func (t *TypeInfo) CType() string {
 	case TagArray:
 		switch t.ArrayType {
 		case CArray:
+			// TODO change [] to *
 			return "[]" + t.ParamTypes[0].CType()
 		case GArray:
 			return "*C.GArray"
@@ -155,6 +156,7 @@ func (t *TypeInfo) GoType(arg bool) string {
 	}
 	switch t.Tag {
 	case TagVoid:		// not in basicGoNames because requires special handling
+		// TODO should this be interface[}?
 		return "unsafe.Pointer"		// !t.isPointer case handled above
 	case TagBoolean:
 		return prefix + "bool"

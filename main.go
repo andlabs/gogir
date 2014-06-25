@@ -115,7 +115,7 @@ func TypeToGo(t *TypeInfo, isArg bool) string {
 	switch t.Tag {
 	case TagVoid:
 		if t.IsPointer {
-			s = "interface{}"
+			s = "unsafe.Pointer"
 		}
 		// otherwise it's a function return; do nothing
 	case TagBoolean:
