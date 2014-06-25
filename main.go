@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"io"
 	"bytes"
-	"strings"
 )
 
 type indenter struct {
@@ -54,7 +53,7 @@ func GoFuncSig(ci CallableInfo) string {
 		s += ArgToGo(i) + ", "
 	}
 	s += ")"
-	ret := TypeToGo(ci.ReturnType, false)
+	ret := ci.ReturnType.GoType(false)
 	if ret != "" {
 		s += " (ret " + ret + ")"
 	}
@@ -66,7 +65,7 @@ func ConstantToGo(c *ConstantInfo) string {
 	if c.Namespace != namespace {
 		return "// " + c.Name + " external; skip"
 	}
-	s := "const " + GoName(c) + " " + TypeToGo(c.Type, false) + " = "
+	s := "const " + GoName(c) + " " + c.Type.GoType(false) + " = "
 	s += "C." + CName(c)
 	return s
 }
@@ -75,7 +74,7 @@ func FieldToGo(f *FieldInfo) string {
 	if f.Namespace != namespace {
 		return "\t// " + f.Name + " external; skip"
 	}
-	s := "\t" + GoName(f) + " " + TypeToGo(f.Type, false)
+	s := "\t" + GoName(f) + " " + f.Type.GoType(false)
 	return s
 }
 
@@ -89,123 +88,6 @@ func UnionToGo(u *UnionInfo) string {
 		s += FieldToGo(n) + "\n"
 	}
 	s += "}\n"
-	return s
-}
-
-func TypeToGo(t *TypeInfo, isArg bool) string {
-	s := ""
-	if t.IsPointer {
-		switch t.Tag {
-		case TagUTF8String, TagFilename, TagArray, TagGList, TagGSList, TagGHashTable:
-			// don't add a pointer to these C types
-		case TagInterface:
-			// see GContainerStorePointer below
-			if t.Interface.Type == TypeInterface {
-				break
-			}
-			if isArg {		// arguments become the equivalent interfaces; see below
-				break
-			}
-			fallthrough
-		default:
-			s += "*"
-		}
-	}
-	// don't add t.Namespace; that'll produce weird things for cross-included data like gobject.string
-	switch t.Tag {
-	case TagVoid:
-		if t.IsPointer {
-			s = "unsafe.Pointer"
-		}
-		// otherwise it's a function return; do nothing
-	case TagBoolean:
-		s += "bool"
-	case TagInt8:
-		s += "int8"
-	case TagUint8:
-		s += "uint8"
-	case TagInt16:
-		s += "int16"
-	case TagUint16:
-		s += "uint16"
-	case TagInt32:
-		s += "int32"
-	case TagUint32:
-		s += "uint32"
-	case TagInt64:
-		s += "int64"
-	case TagUint64:
-		s += "uint64"
-	case TagFloat:
-		s += "float32"
-	case TagDouble:
-		s += "float64"
-	case TagGType:
-		if namespace != "GObject" {
-			s += "gobject."
-		}
-		s += "GType"
-	case TagUTF8String:
-		s += "string"
-	case TagFilename:
-		s += "string"
-	case TagArray:
-		switch t.ArrayType {
-		case CArray, GArray:
-			s += "[]"
-			s += TypeToGo(t.ParamTypes[0], false)
-		case GPtrArray:
-			s += "[]"
-			if !t.ParamTypes[0].IsPointer {
-				s += "*"
-			}
-			s += TypeToGo(t.ParamTypes[0], false)
-		case GByteArray:
-			s += "[]byte"
-		default:
-			panic(fmt.Errorf("unknown array type %d", t.ArrayType))
-		}
-	case TagInterface:
-		if t.Interface.Namespace != namespace {
-			s += strings.ToLower(t.Interface.Namespace) + "."
-		}
-		if isArg {		// arguments become the equivalent interfaces
-			if t.Type == TypeObject {
-				s += "I"
-			}
-			// TODO structs and unions?
-		}
-		s += t.Interface.Name
-	case TagGList:
-		s += "[]"
-		if t.ParamTypes[0].GContainerStorePointer() {
-			s += "*"
-		}
-		s += TypeToGo(t.ParamTypes[0], false)
-	case TagGSList:
-		s += "[]"
-		if t.ParamTypes[0].GContainerStorePointer() {
-			s += "*"
-		}
-		s += TypeToGo(t.ParamTypes[0], false)
-	case TagGHashTable:
-		s += "map["
-		if t.ParamTypes[0].GContainerStorePointer() {
-			s += "*"
-		}
-		s += TypeToGo(t.ParamTypes[0], false)
-		s += "]"
-		if t.ParamTypes[1].GContainerStorePointer() {
-			s += "*"
-		}
-		s += TypeToGo(t.ParamTypes[1], false)
-	case TagGError:
-		s += "error"
-	case TagUnichar:
-		s += "rune"
-	default:
-		panic(fmt.Errorf("unknown tag type %d", t.Tag))
-	}
 	return s
 }
 

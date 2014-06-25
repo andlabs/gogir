@@ -132,8 +132,7 @@ func generate(ns Namespace) {
 		}
 		fmt.Fprintf(b, "type %s struct {\n", goName)
 		for _, f := range s.Fields {
-			// TODO substitute TypeToGo()
-			fmt.Fprintf(b, "\t%s %s\n", GoName(f), TypeToGo(f.Type, false))
+			fmt.Fprintf(b, "\t%s %s\n", GoName(f), f.Type.GoType(false))
 		}
 		fmt.Fprintf(b, "}\n")
 		// TODO conversion functions
