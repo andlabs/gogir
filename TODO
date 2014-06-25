@@ -4,3 +4,9 @@
   OBJECT - do append
   STRUCT - do not append
   UNION - ?????
+- interface object wrapping doesn't actually work
+	Arg.GoDecl() actually sends false to GoType(), but sending true causes weird behavior (constructors return the interface type; lists are not converted)
+	and Prefix()/Suffix()/listIn() likely don't (and listOut() likely won't the first time if I don't settle this) handle them correctly
+	ideally, all objects should be converted to interfaces except
+		- all receivers
+		- constructor returns
