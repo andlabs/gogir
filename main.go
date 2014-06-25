@@ -44,14 +44,14 @@ func main() {
 	}
 }
 
-func ArgToGo(arg *ArgInfo, isArg bool) string {
-	return fmt.Sprintf("%s %s", arg.Name, TypeToGo(arg.Type, isArg))
+func ArgToGo(arg *ArgInfo) string {
+	return fmt.Sprintf("%s %s", arg.Name, arg.Type.GoType(true))
 }
 
 func GoFuncSig(ci CallableInfo) string {
 	s := GoName(ci) + "("
 	for _, i := range ci.Args {
-		s += ArgToGo(i, true) + ", "
+		s += ArgToGo(i) + ", "
 	}
 	s += ")"
 	ret := TypeToGo(ci.ReturnType, false)
