@@ -168,7 +168,7 @@ func (t *TypeInfo) GoType(arg bool) string {
 	case TagUTF8String, TagFilename:
 		// ignore pointer
 		return "string"
-	case TagArray, TagGList, TagGSList:
+	case TagArray:
 		// ignore pointer
 		// arg should not be carried below the first recursive call
 		return "[]" + t.ParamTypes[0].GoType(false)
@@ -187,10 +187,29 @@ func (t *TypeInfo) GoType(arg bool) string {
 		}
 		s = prefix + s
 		return s
-	case TagGHashTable:
-		// ignore pointer
+	case TagGList, TagGSList:
+		// override prefix so that * is only added if a non-interface, non-enum object is being stored
+		t0 := t.ParamTypes[0]
+		prefix = ""
+		if t0.GContainerStorePointer() {
+			prefix = "*"
+		}
 		// arg should not be carried below the first recursive call
-		return "map[" + t.ParamTypes[0].GoType(false) + "]" + t.ParamTypes[1].GoType(false)
+		return "[]" + prefix + t.ParamTypes[0].GoType(false)
+	case TagGHashTable:
+		// see above on overriding pointers
+		t0 := t.ParamTypes[0]
+		prefixa := ""
+		if t0.GContainerStorePointer() {
+			prefixa = "*"
+		}
+		t1 := t.ParamTypes[0]
+		prefixb := ""
+		if t1.GContainerStorePointer() {
+			prefixb = "*"
+		}
+		// arg should not be carried below the first recursive call
+		return "map[" + prefixa + t0.GoType(false) + "]" + prefixb + t1.GoType(false)
 	case TagGError:
 		// ignore pointer
 		return "error"

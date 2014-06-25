@@ -206,7 +206,7 @@ func TypeToGo(t *TypeInfo, isArg bool) string {
 // for GList, GSList, and GHashTable, whether the stored type is a pointer is not stored; use this function to find out
 // interfaces become Go interfaces which are /references/, so don't make htem pointers either
 func (t *TypeInfo) GContainerStorePointer() bool {
-	return t.Tag == TagInterface && t.Interface.Type != TypeInterface
+	return t.Tag == TagInterface && t.Interface.Type != TypeInterface //TODO && t.Interface.Type != TypeEnum
 }
 
 func (t TypeTag) BasicString() string {
