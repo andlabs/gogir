@@ -215,7 +215,7 @@ func (t *TypeInfo) GoType(arg bool) string {
 		if t0.GContainerStorePointer() {
 			prefixa = "*"
 		}
-		t1 := t.ParamTypes[0]
+		t1 := t.ParamTypes[1]
 		prefixb := ""
 		if t1.GContainerStorePointer() {
 			prefixb = "*"
