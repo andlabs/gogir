@@ -169,9 +169,17 @@ func (t *TypeInfo) GoType(arg bool) string {
 		// ignore pointer
 		return "string"
 	case TagArray:
-		// ignore pointer
+		// ignore pointer if not GPtrArray; force []byte for GByteArray
 		// arg should not be carried below the first recursive call
-		return "[]" + t.ParamTypes[0].GoType(false)
+		switch t.ArrayType {
+		case CArray, GArray:
+			return "[]" + t.ParamTypes[0].GoType(false)
+		case GPtrArray:
+			return "[]*" + t.ParamTypes[0].GoType(false)
+		case GByteArray:
+			return "[]byte"
+		}
+		panic(fmt.Errorf("unknown array type %d in TypeInfo.GoType()", t.ArrayType))
 	case TagInterface:
 		s := t.Interface.Name
 		isInterface := t.Interface.Type == TypeInterface
