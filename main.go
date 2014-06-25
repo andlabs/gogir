@@ -155,7 +155,10 @@ func TypeToGo(t *TypeInfo, isArg bool) string {
 			s += "[]"
 			s += TypeToGo(t.ParamTypes[0], false)
 		case GPtrArray:
-			s += "[]*"
+			s += "[]"
+			if !t.ParamTypes[0].IsPointer {
+				s += "*"
+			}
 			s += TypeToGo(t.ParamTypes[0], false)
 		case GByteArray:
 			s += "[]byte"

@@ -172,10 +172,14 @@ func (t *TypeInfo) GoType(arg bool) string {
 		// ignore pointer if not GPtrArray; force []byte for GByteArray
 		// arg should not be carried below the first recursive call
 		switch t.ArrayType {
+		case GPtrArray:
+			// sometimes the param type will be listed as a pointer too, resulting in []**TypeName
+			if !t.ParamTypes[0].IsPointer {
+				return "[]*" + t.ParamTypes[0].GoType(false)
+			}
+			fallthrough
 		case CArray, GArray:
 			return "[]" + t.ParamTypes[0].GoType(false)
-		case GPtrArray:
-			return "[]*" + t.ParamTypes[0].GoType(false)
 		case GByteArray:
 			return "[]byte"
 		}
