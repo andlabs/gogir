@@ -141,6 +141,9 @@ func TypeToGo(t *TypeInfo, isArg bool) string {
 	case TagDouble:
 		s += "float64"
 	case TagGType:
+		if namespace != "GObject" {
+			s += "gobject."
+		}
 		s += "GType"
 	case TagUTF8String:
 		s += "string"
